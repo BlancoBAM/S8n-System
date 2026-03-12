@@ -2,7 +2,20 @@
 
 ![s8n](https://img.shields.io/badge/Language-Rust-orange?style=for-the-badge&logo=rust) ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
-`s8n` is a universal package manager wrapper written in Rust, designed for Lilith Linux. It unifies operations across multiple diverse package managers while providing an elegant, inline Terminal UI inspired by the Charmbracelet `bubbletea` framework.
+`s8n` (Saigon Rx Package Manager) is a universal package manager wrapper written in Rust, designed for Lilith Linux. It unifies operations across multiple diverse package managers while providing an elegant, inline Terminal UI inspired by the Charmbracelet `bubbletea` framework.
+
+## Lilith Linux Integration
+
+S8n is the official command-line package manager for **Lilith Linux**, providing a unified interface to all supported package managers in the distribution.
+
+### Part of Lilith Linux
+
+| Component | Purpose |
+|-----------|---------|
+| **COSMIC Desktop** | Desktop Environment |
+| **Offerings** | GUI Package Manager |
+| **S8n-Rx-PackMan** | CLI Package Manager |
+| **Lilim** | AI Assistant |
 
 ## ✨ Features
 
@@ -19,6 +32,17 @@
   - `topgrade`
 
 ## 🚀 Installation
+
+### Lilith Linux (Recommended)
+
+S8n comes pre-installed on Lilith Linux. To reinstall or update:
+
+```bash
+sudo apt update
+sudo apt install s8n-rx-packman
+```
+
+### From Source
 
 Ensure you have Rust and Cargo installed, then clone and build the project:
 
