@@ -1,95 +1,50 @@
-# S8n-Rx-PackMan 
+# S8n System Manager
 
-![s8n](https://img.shields.io/badge/Language-Rust-orange?style=for-the-badge&logo=rust) ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+S8n is a fast, visually stunning System Manager, Unified Package Manager, and File Manager built in Rust. It utilizes `ratatui` to provide native terminal gradients, miller-column file browsing, and cross-package-manager fuzzy search capabilities directly in your console.
 
-`s8n` (Saigon Rx Package Manager) is a universal package manager wrapper written in Rust, designed for Lilith Linux. It unifies operations across multiple diverse package managers while providing an elegant, inline Terminal UI inspired by the Charmbracelet `bubbletea` framework.
+## Features
 
-## Lilith Linux Integration
+- **Unified Package Manager**: Search, install, and track progress for system packages across PyPI, Cargo, Node/NPM, and more. 
+- **Animated Progress Displays**: Native braille spinners and heat-gradient task loading bars as each package installs.
+- **Miller-Column File Manager**: Traverse through your local directories safely with drill-down exploration, dynamic deletion, editing (`$EDITOR`), moves, and file previews.
+- **Dynamic Theming Engine**: Switch the aesthetic of the *entire application* live using the built-in Color Picker. Try `Fire`, `Ocean`, `Sunset`, `Forest`, or `Purple Dream` instantly.
 
-S8n is the official command-line package manager for **Lilith Linux**, providing a unified interface to all supported package managers in the distribution.
+## Installation
 
-### Part of Lilith Linux
-
-| Component | Purpose |
-|-----------|---------|
-| **COSMIC Desktop** | Desktop Environment |
-| **Offerings** | GUI Package Manager |
-| **S8n-Rx-PackMan** | CLI Package Manager |
-| **Lilim** | AI Assistant |
-
-## ✨ Features
-
-- **Unified Interface**: Use a single set of commands to interact with multiple package managers.
-- **Beautiful TUI**: Features a sleek inline spinner and progress tracking interface powered by `ratatui`.
-- **Intelligent Routing**: Automatically routes URL installations to `soar` and delegates system upgrades to `topgrade`.
-- **Supported Backends**:
-  - `apt` / `pacstall`
-  - `flatpak` / `snap` / `appimage` (via soar)
-  - `brew`
-  - `npm` / `bun`
-  - `pip` / `pypi`
-  - `soar`
-  - `topgrade`
-
-## 🚀 Installation
-
-### Lilith Linux (Recommended)
-
-S8n comes pre-installed on Lilith Linux. To reinstall or update:
-
-```bash
-sudo apt update
-sudo apt install s8n-rx-packman
-```
+### Binary Release (Recommended)
+You can directly download the fully compiled static binaries for Linux via the [GitHub Releases](../../releases) tab. Simply drop the `s8n` binary into `~/.local/bin/s8n` or `/usr/local/bin` and you're good to go.
 
 ### From Source
-
-Ensure you have Rust and Cargo installed, then clone and build the project:
+Ensure you have `cargo` and `rustc` installed. Build the application and copy it manually to your system's binaries folder:
 
 ```bash
-git clone https://github.com/BlancoBAM/S8n-Rx-PackMan.git
-cd S8n-Rx-PackMan
+git clone https://github.com/BlancoBAM/S8n-System.git
+cd S8n-System
 cargo build --release
-sudo cp target/release/s8n /usr/local/bin/
+cp target/release/s8n ~/.local/bin/s8n
 ```
 
-## 💻 Usage
+*Note: S8n occasionally utilizes `skim` (the Rust version of fzf) for pipelining its package searches. Please make sure `sk` is in your environment PATH for the optimal PackMan experience.*
 
-`s8n` relies on 4 simple intuitive commands:
+## Usage
 
-### Search for Packages
-Search across all integrated package managers:
+Start the main menu straight from anywhere via terminal:
+
 ```bash
-s8n search <query>
+s8n
 ```
 
-### Install Packages
-Install packages using the native system package manager, or install directly from a URL via `soar`:
-```bash
-s8n stall <package_name>
-s8n stall https://github.com/example/release.appimage
-```
+Navigate with Arrow Keys, `[j/k/h/l]`, and `Enter`.
+Hit `q` or `Esc` to jump back to the previous screen or close out.
 
-### Remove Packages
-Remove installed packages from your system:
-```bash
-s8n burn <package_name>
-```
+## Inspirations & Credits
 
-### Update System
-Upgrade all system packages across all connected package managers. Utilizes `topgrade` if installed:
-```bash
-s8n upd8
-```
+The user interface and aesthetics for S8n were heavily inspired by the incredible ecosystem of the [Charmbracelet Labs](https://charm.sh/). 
+Special shout-out to the following incredible Rust libraries and references:
+- [ratatui](https://github.com/ratatui-org/ratatui) - An exceptional library for cooking up sleek terminal UIs in Rust.
+- [bubbletea-rs](https://github.com/whit3rabbit/bubbletea-rs) by @whit3rabbit - Reference examples for building smooth TUI package manager experiences and gradient progress bars in Rust.
+- [lipgloss-rs](https://github.com/whit3rabbit/lipgloss-rs) by @whit3rabbit - The reference definitions for gradient generation and heat-mapping, helping shape `s8n`'s Fire aesthetic mappings.
 
-## 🏗️ Architecture
+## License
 
-The codebase is structured to be extensible:
-- **`src/main.rs`**: Core CLI routing and entrypoint.
-- **`src/ui.rs`**: The inline `ratatui` Terminal User Interface used for displaying progress states.
-- **`src/pm/mod.rs`**: Trait definitions for generic package manager backends.
-- **`src/pm/builtin.rs`**: Built-in shell execution strategies for all natively wrapped package managers.
-- **`src/config.rs`**: Future-proof configuration loader for dynamic package manager additions.
-
-## 🤝 Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
+This software is released openly on GitHub. Feel free to track issues, clone, fork, and request improvements.
