@@ -271,7 +271,11 @@ pub fn render_file_manager(f: &mut ratatui::Frame, state: &mut FileManagerState,
         .map(|(i, e)| {
             let is_selected = state.list_state.selected() == Some(i);
             let prefix = if e.is_dir {
-                if is_selected { "▸ " } else { "▸ " } 
+                if is_selected {
+                    "▸ "
+                } else {
+                    "▸ "
+                }
             } else {
                 "  "
             };
