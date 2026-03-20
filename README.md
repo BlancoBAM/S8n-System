@@ -47,4 +47,4 @@ Special shout-out to the following incredible Rust libraries and references:
 
 ## License
 
-This software is released openly on GitHub. Feel free to track issues, clone, fork, and request improvements.
+This software is released openly on GitHub under the [GNU General Public License v3.0](LICENSE). Feel free to track issues, clone, fork, and request improvements in accordance with the GPL-3.0 terms.
