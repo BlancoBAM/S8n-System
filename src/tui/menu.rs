@@ -1,11 +1,11 @@
+use bubbletea_rs::gradient::gradient_filled_segment;
 use crossterm::event::KeyCode;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState},
 };
-use bubbletea_rs::gradient::gradient_filled_segment;
 
 use super::theme;
 
@@ -19,6 +19,12 @@ pub enum MenuAction {
 pub struct MenuState {
     pub list_state: ListState,
     pub items: Vec<&'static str>,
+}
+
+impl Default for MenuState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MenuState {
@@ -89,7 +95,10 @@ pub fn render_menu(f: &mut ratatui::Frame, state: &mut MenuState, area: Rect) {
     f.render_widget(Clear, dialog);
 
     // Fire gradient title (approximate lipgloss 'fire' gradient colors: red to yellow)
-    let fire_title = format!("  s8n · System Manager  {}", gradient_filled_segment(10, '█'));
+    let _fire_title = format!(
+        "  s8n · System Manager  {}",
+        gradient_filled_segment(10, '█')
+    );
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme::border())
@@ -100,21 +109,38 @@ pub fn render_menu(f: &mut ratatui::Frame, state: &mut MenuState, area: Rect) {
     f.render_widget(block, dialog);
 
     // Inner area for list
-    let list_area = Rect::new(dialog.x + 2, dialog.y + 2, dialog.width.saturating_sub(4), dialog.height.saturating_sub(4));
+    let list_area = Rect::new(
+        dialog.x + 2,
+        dialog.y + 2,
+        dialog.width.saturating_sub(4),
+        dialog.height.saturating_sub(4),
+    );
 
-    let items: Vec<ListItem> = state.items.iter().enumerate().map(|(i, &item)| {
-        let is_selected = state.list_state.selected() == Some(i);
-        let prefix = if is_selected { "▶ " } else { "  " };
-        let style = if is_selected {
-            theme::highlight()
-        } else {
-            Style::default().fg(theme::text())
-        };
-        ListItem::new(Line::from(vec![
-            Span::styled(prefix, if is_selected { theme::search_label() } else { Style::default() }),
-            Span::styled(item, style),
-        ]))
-    }).collect();
+    let items: Vec<ListItem> = state
+        .items
+        .iter()
+        .enumerate()
+        .map(|(i, &item)| {
+            let is_selected = state.list_state.selected() == Some(i);
+            let prefix = if is_selected { "▶ " } else { "  " };
+            let style = if is_selected {
+                theme::highlight()
+            } else {
+                Style::default().fg(theme::text())
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    prefix,
+                    if is_selected {
+                        theme::search_label()
+                    } else {
+                        Style::default()
+                    },
+                ),
+                Span::styled(item, style),
+            ]))
+        })
+        .collect();
 
     let list = List::new(items);
     f.render_stateful_widget(list, list_area, &mut state.list_state);

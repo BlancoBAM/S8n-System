@@ -22,7 +22,10 @@ pub async fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
 
 pub fn get_theme() -> String {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    let path = std::path::PathBuf::from(home).join(".config").join("s8n").join("theme.toml");
+    let path = std::path::PathBuf::from(home)
+        .join(".config")
+        .join("s8n")
+        .join("theme.toml");
     if let Ok(content) = std::fs::read_to_string(path) {
         if let Some(line) = content.lines().find(|l| l.starts_with("theme = ")) {
             let theme_name = line.replace("theme = ", "").replace("\"", "");

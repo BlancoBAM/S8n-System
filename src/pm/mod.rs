@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use std::process::Stdio;
 use tokio::process::Command;
-use async_trait::async_trait;
 
 pub mod builtin;
 
@@ -56,7 +56,10 @@ pub async fn run_command_interactive(cmd: &mut Command) -> PmResult {
             if status.success() {
                 PmResult::Success
             } else {
-                PmResult::CommandFailed(status.code().unwrap_or(-1), format!("Command failed: {:?}", cmd))
+                PmResult::CommandFailed(
+                    status.code().unwrap_or(-1),
+                    format!("Command failed: {:?}", cmd),
+                )
             }
         }
         Err(e) => PmResult::Error(e.to_string()),
@@ -76,7 +79,11 @@ pub async fn run_command_captured(cmd: &mut Command) -> Result<String, String> {
                 Ok(String::from_utf8_lossy(&output.stdout).to_string())
             } else {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                Err(format!("Exit {}: {}", output.status.code().unwrap_or(-1), stderr))
+                Err(format!(
+                    "Exit {}: {}",
+                    output.status.code().unwrap_or(-1),
+                    stderr
+                ))
             }
         }
         Err(e) => Err(e.to_string()),

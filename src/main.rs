@@ -1,5 +1,5 @@
-use clap::{Parser, Subcommand};
 use crate::pm::{builtin::get_default_managers, PackageManager};
+use clap::{Parser, Subcommand};
 
 pub mod config;
 pub mod pm;
@@ -45,7 +45,11 @@ fn choose_primary_manager<'a>(
             .map(|manager| manager.as_ref())
             .ok_or_else(|| {
                 let names: Vec<_> = managers.iter().map(|m| m.name()).collect();
-                format!("Package manager '{}' not available. Available: {}", requested, names.join(", "))
+                format!(
+                    "Package manager '{}' not available. Available: {}",
+                    requested,
+                    names.join(", ")
+                )
             });
     }
 
@@ -63,7 +67,9 @@ fn parse_source_prefix(input: &str) -> (Option<&str>, &str) {
         let source = &input[..colon];
         let pkg = &input[colon + 1..];
         // Only treat as source prefix if source is a known PM name
-        let known = ["apt", "pacstall", "flatpak", "snap", "brew", "soar", "npm", "bun", "pip"];
+        let known = [
+            "apt", "pacstall", "flatpak", "snap", "brew", "soar", "npm", "bun", "pip",
+        ];
         if known.contains(&source) && !pkg.is_empty() {
             return (Some(source), pkg);
         }
@@ -94,13 +100,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(Commands::Search { query }) => {
             // Launch full-screen search TUI directly
-            let search_managers: Vec<Box<dyn PackageManager>> = if let Some(requested) = requested_manager {
-                available_managers.into_iter()
-                    .filter(|m| m.name() == requested)
-                    .collect()
-            } else {
-                available_managers
-            };
+            let search_managers: Vec<Box<dyn PackageManager>> =
+                if let Some(requested) = requested_manager {
+                    available_managers
+                        .into_iter()
+                        .filter(|m| m.name() == requested)
+                        .collect()
+                } else {
+                    available_managers
+                };
 
             tui::run_search_tui(&search_managers, query.as_deref()).await?;
         }
@@ -117,13 +125,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Handle regular packages (with source prefix support)
             if !pkgs.is_empty() {
                 // Group packages by source
-                let mut by_source: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+                let mut by_source: std::collections::HashMap<String, Vec<String>> =
+                    std::collections::HashMap::new();
                 let mut default_pkgs = Vec::new();
 
                 for pkg in &pkgs {
                     let (source, name) = parse_source_prefix(pkg);
                     if let Some(src) = source {
-                        by_source.entry(src.to_string()).or_default().push(name.to_string());
+                        by_source
+                            .entry(src.to_string())
+                            .or_default()
+                            .push(name.to_string());
                     } else {
                         default_pkgs.push(name.to_string());
                     }
@@ -173,7 +185,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Upd8) => {
             let pm = if let Some(requested) = requested_manager {
                 choose_primary_manager(&available_managers, Some(requested))?
-            } else if let Some(topgrade) = available_managers.iter().find(|m| m.name() == "topgrade") {
+            } else if let Some(topgrade) =
+                available_managers.iter().find(|m| m.name() == "topgrade")
+            {
                 topgrade.as_ref()
             } else {
                 choose_primary_manager(&available_managers, None)?

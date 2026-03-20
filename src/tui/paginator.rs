@@ -1,3 +1,4 @@
+use super::theme;
 /// Paginator widget with animated dot indicators
 use ratatui::{
     buffer::Buffer,
@@ -5,12 +6,11 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
-use super::theme;
 
 pub struct Paginator {
     pub current_page: usize,
     pub total_pages: usize,
-    pub tick: u64,  // animation tick for subtle glow effect
+    pub tick: u64, // animation tick for subtle glow effect
 }
 
 impl Widget for Paginator {

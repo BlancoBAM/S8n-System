@@ -1,13 +1,10 @@
 use crossterm::event::KeyCode;
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
-use bubbletea_rs::gradient::gradient_filled_segment;
-use std::fs;
-use std::path::PathBuf;
 
 use super::theme;
 
@@ -23,6 +20,12 @@ pub struct ColorPickerState {
     pub themes: Vec<ColorTheme>,
 }
 
+impl Default for ColorPickerState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ColorPickerState {
     pub fn new() -> Self {
         let mut state = ListState::default();
@@ -32,7 +35,9 @@ impl ColorPickerState {
             ColorTheme { name: "Sunset" },
             ColorTheme { name: "Ocean" },
             ColorTheme { name: "Forest" },
-            ColorTheme { name: "Purple Dream" },
+            ColorTheme {
+                name: "Purple Dream",
+            },
         ];
         Self {
             list_state: state,
@@ -42,7 +47,13 @@ impl ColorPickerState {
 
     pub fn next(&mut self) {
         let i = match self.list_state.selected() {
-            Some(i) => if i >= self.themes.len() - 1 { 0 } else { i + 1 },
+            Some(i) => {
+                if i >= self.themes.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
             None => 0,
         };
         self.list_state.select(Some(i));
@@ -52,7 +63,13 @@ impl ColorPickerState {
 
     pub fn previous(&mut self) {
         let i = match self.list_state.selected() {
-            Some(i) => if i == 0 { self.themes.len() - 1 } else { i - 1 },
+            Some(i) => {
+                if i == 0 {
+                    self.themes.len() - 1
+                } else {
+                    i - 1
+                }
+            }
             None => 0,
         };
         self.list_state.select(Some(i));
@@ -63,7 +80,7 @@ impl ColorPickerState {
     pub fn apply_selected(&self) {
         if let Some(i) = self.list_state.selected() {
             let theme = &self.themes[i];
-            crate::config::save_theme(&theme.name);
+            crate::config::save_theme(theme.name);
             theme::reload(); // Reload theme from config
         }
     }
@@ -95,36 +112,71 @@ pub fn render_color_picker(f: &mut ratatui::Frame, state: &mut ColorPickerState,
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme::border())
-        .title(Span::styled(" 🎨 Color Theme Selector ", theme::grid_header()))
+        .title(Span::styled(
+            " 🎨 Color Theme Selector ",
+            theme::grid_header(),
+        ))
         .style(Style::default().bg(theme::bg_color()));
 
     f.render_widget(block, dialog);
 
-    let list_area = Rect::new(dialog.x + 2, dialog.y + 2, dialog.width.saturating_sub(4), dialog.height.saturating_sub(4));
+    let list_area = Rect::new(
+        dialog.x + 2,
+        dialog.y + 2,
+        dialog.width.saturating_sub(4),
+        dialog.height.saturating_sub(4),
+    );
 
     let current_theme = crate::config::get_theme();
 
-    let items: Vec<ListItem> = state.themes.iter().enumerate().map(|(i, theme)| {
-        let is_selected = state.list_state.selected() == Some(i);
-        let prefix = if is_selected { "▶ " } else { "  " };
-        let active_mark = if theme.name == current_theme { " (saved)" } else { "" };
-        
-        let style = if is_selected {
-            theme::highlight()
-        } else {
-            Style::default().fg(theme::THEME.read().unwrap().text)
-        };
-        
-        ListItem::new(Line::from(vec![
-            Span::styled(prefix, if is_selected { theme::search_label() } else { Style::default() }),
-            Span::styled(format!("{:<20}{}", theme.name, active_mark), style),
-        ]))
-    }).collect();
+    let items: Vec<ListItem> = state
+        .themes
+        .iter()
+        .enumerate()
+        .map(|(i, theme)| {
+            let is_selected = state.list_state.selected() == Some(i);
+            let prefix = if is_selected { "▶ " } else { "  " };
+            let active_mark = if theme.name == current_theme {
+                " (saved)"
+            } else {
+                ""
+            };
+
+            let style = if is_selected {
+                theme::highlight()
+            } else {
+                Style::default().fg(theme::THEME.read().unwrap().text)
+            };
+
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    prefix,
+                    if is_selected {
+                        theme::search_label()
+                    } else {
+                        Style::default()
+                    },
+                ),
+                Span::styled(format!("{:<20}{}", theme.name, active_mark), style),
+            ]))
+        })
+        .collect();
 
     let list = List::new(items);
     f.render_stateful_widget(list, list_area, &mut state.list_state);
-    
+
     // Help line
-    let help_area = Rect::new(dialog.x + 2, dialog.y + dialog.height - 2, dialog.width.saturating_sub(4), 1);
-    f.render_widget(Paragraph::new(Span::styled("[↑↓] preview   [Enter] save   [q] back", theme::dim())), help_area);
+    let help_area = Rect::new(
+        dialog.x + 2,
+        dialog.y + dialog.height - 2,
+        dialog.width.saturating_sub(4),
+        1,
+    );
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            "[↑↓] preview   [Enter] save   [q] back",
+            theme::dim(),
+        )),
+        help_area,
+    );
 }

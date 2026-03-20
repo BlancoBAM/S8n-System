@@ -99,7 +99,8 @@ checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 [[package]]
 name = "bubbletea-rs"
 version = "0.0.9"
-source = "git+https://github.com/whit3rabbit/bubbletea-rs.git#64a4460c91832ab6ffa98e2f39a24cc01730d4aa"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a392fed32c2693877582183a446d43b54f8ce4f6ca1dcca9d17acc931c891c4"
 dependencies = [
  "anyhow",
  "async-trait",

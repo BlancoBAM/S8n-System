@@ -1,4 +1,7 @@
-use super::{PackageInfo, PackageManager, PmResult, run_command_interactive, run_command_captured, run_command_quiet};
+use super::{
+    run_command_captured, run_command_interactive, run_command_quiet, PackageInfo, PackageManager,
+    PmResult,
+};
 use async_trait::async_trait;
 use tokio::process::Command;
 use which::which;
@@ -79,15 +82,15 @@ impl PackageManager for GenericWrapper {
 /// Parse search output from various package managers into structured PackageInfo
 fn parse_search_output(source: &str, output: &str) -> Vec<PackageInfo> {
     let mut results = match source {
-        "apt"      => parse_apt_output(output, source),
-        "flatpak"  => parse_flatpak_output(output, source),
-        "snap"     => parse_snap_output(output, source),
-        "brew"     => parse_brew_output(output, source),
-        "npm"      => parse_npm_output(output, source),
-        "pip"      => parse_pip_output(output, source),
+        "apt" => parse_apt_output(output, source),
+        "flatpak" => parse_flatpak_output(output, source),
+        "snap" => parse_snap_output(output, source),
+        "brew" => parse_brew_output(output, source),
+        "npm" => parse_npm_output(output, source),
+        "pip" => parse_pip_output(output, source),
         "pacstall" => parse_pacstall_output(output, source),
-        "soar"     => parse_soar_output(output, source),
-        _          => parse_generic_output(output, source),
+        "soar" => parse_soar_output(output, source),
+        _ => parse_generic_output(output, source),
     };
     // Global filter: remove blank-name entries produced by any parser
     results.retain(|p| !p.name.trim().is_empty() && p.name.chars().any(|c| c.is_alphanumeric()));
@@ -182,7 +185,11 @@ fn parse_flatpak_output(output: &str, source: &str) -> Vec<PackageInfo> {
             let version = parts.get(3).unwrap_or(&"").trim().to_string();
 
             results.push(PackageInfo {
-                name: if app_id.is_empty() { display_name.to_string() } else { app_id },
+                name: if app_id.is_empty() {
+                    display_name.to_string()
+                } else {
+                    app_id
+                },
                 version,
                 description,
                 source: source.to_string(),
@@ -197,7 +204,9 @@ fn parse_flatpak_output(output: &str, source: &str) -> Vec<PackageInfo> {
 fn parse_snap_output(output: &str, source: &str) -> Vec<PackageInfo> {
     let mut results = Vec::new();
     for (i, line) in output.lines().enumerate() {
-        if i == 0 { continue; } // skip header
+        if i == 0 {
+            continue;
+        } // skip header
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() >= 4 {
             let name = parts[0].to_string();
@@ -228,7 +237,7 @@ fn parse_brew_output(output: &str, source: &str) -> Vec<PackageInfo> {
         .map(|l| PackageInfo {
             name: l.trim().to_string(),
             version: String::new(),
-            description: format!("Homebrew formula/cask"),
+            description: "Homebrew formula/cask".to_string(),
             source: source.to_string(),
             installed: false,
         })
@@ -239,9 +248,13 @@ fn parse_brew_output(output: &str, source: &str) -> Vec<PackageInfo> {
 fn parse_npm_output(output: &str, source: &str) -> Vec<PackageInfo> {
     let mut results = Vec::new();
     for (i, line) in output.lines().enumerate() {
-        if i == 0 { continue; } // skip header ("NAME | ...")
+        if i == 0 {
+            continue;
+        } // skip header ("NAME | ...")
         let line = line.trim();
-        if line.is_empty() || line.starts_with('|') { continue; }
+        if line.is_empty() || line.starts_with('|') {
+            continue;
+        }
         // npm search in table: "name  |  description  |  author  |  date  |  version  |  keywords"
         let parts: Vec<&str> = line.split('|').collect();
         if parts.len() >= 2 {
@@ -267,14 +280,16 @@ fn parse_pip_output(output: &str, source: &str) -> Vec<PackageInfo> {
     let mut results = Vec::new();
     for line in output.lines() {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         // pip search format: "name (version) - description"
         if let Some(paren_pos) = line.find('(') {
             if let Some(close) = line.find(')') {
                 let name = line[..paren_pos].trim().to_string();
-                let version = line[paren_pos+1..close].to_string();
+                let version = line[paren_pos + 1..close].to_string();
                 let description = if line.len() > close + 3 {
-                    line[close+3..].to_string()
+                    line[close + 3..].to_string()
                 } else {
                     String::new()
                 };
@@ -316,8 +331,13 @@ fn parse_pacstall_output(output: &str, source: &str) -> Vec<PackageInfo> {
                 // Just a package name with no version info
                 let parts: Vec<&str> = trimmed.splitn(2, char::is_whitespace).collect();
                 let name = parts[0].to_string();
-                let ver = parts.get(1).unwrap_or(&"").trim()
-                    .trim_start_matches('@').trim().to_string();
+                let ver = parts
+                    .get(1)
+                    .unwrap_or(&"")
+                    .trim()
+                    .trim_start_matches('@')
+                    .trim()
+                    .to_string();
                 (name, ver, false)
             };
             PackageInfo {

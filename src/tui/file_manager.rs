@@ -1,14 +1,13 @@
+use crate::tui::theme;
 use crossterm::event::KeyCode;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Modifier},
+    style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 use std::fs;
 use std::path::{Path, PathBuf};
-use bubbletea_rs::gradient::gradient_filled_segment;
-use crate::tui::theme;
 
 #[derive(Clone)]
 pub struct FileEntry {
@@ -23,9 +22,15 @@ pub struct FileManagerState {
     pub current_entries: Vec<FileEntry>,
     pub preview_text: Vec<String>,
     pub list_state: ListState,
-    
+
     // For move operation
     pub marked_for_move: Option<PathBuf>,
+}
+
+impl Default for FileManagerState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FileManagerState {
@@ -50,13 +55,17 @@ impl FileManagerState {
         } else {
             self.parent_entries.clear();
         }
-        
+
         // Ensure valid selection
         if self.current_entries.is_empty() {
             self.list_state.select(None);
             self.preview_text.clear();
         } else {
-            let i = self.list_state.selected().unwrap_or(0).min(self.current_entries.len().saturating_sub(1));
+            let i = self
+                .list_state
+                .selected()
+                .unwrap_or(0)
+                .min(self.current_entries.len().saturating_sub(1));
             self.list_state.select(Some(i));
             self.update_preview();
         }
@@ -74,9 +83,17 @@ impl FileManagerState {
     }
 
     pub fn next(&mut self) {
-        if self.current_entries.is_empty() { return; }
+        if self.current_entries.is_empty() {
+            return;
+        }
         let i = match self.list_state.selected() {
-            Some(i) => if i >= self.current_entries.len() - 1 { 0 } else { i + 1 },
+            Some(i) => {
+                if i >= self.current_entries.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
             None => 0,
         };
         self.list_state.select(Some(i));
@@ -84,9 +101,17 @@ impl FileManagerState {
     }
 
     pub fn previous(&mut self) {
-        if self.current_entries.is_empty() { return; }
+        if self.current_entries.is_empty() {
+            return;
+        }
         let i = match self.list_state.selected() {
-            Some(i) => if i == 0 { self.current_entries.len() - 1 } else { i - 1 },
+            Some(i) => {
+                if i == 0 {
+                    self.current_entries.len() - 1
+                } else {
+                    i - 1
+                }
+            }
             None => 0,
         };
         self.list_state.select(Some(i));
@@ -111,10 +136,14 @@ impl FileManagerState {
 
     pub fn drill_up(&mut self) {
         if let Some(parent) = self.current_dir.parent() {
-            let old_name = self.current_dir.file_name().and_then(|n| n.to_str()).map(|n| n.to_string());
+            let old_name = self
+                .current_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.to_string());
             self.current_dir = parent.to_path_buf();
             self.refresh();
-            
+
             // Try to select the directory we just left
             if let Some(name) = old_name {
                 if let Some(i) = self.current_entries.iter().position(|e| e.name == name) {
@@ -132,7 +161,7 @@ impl FileManagerState {
             KeyCode::Up | KeyCode::Char('k') => self.previous(),
             KeyCode::Right | KeyCode::Char('l') | KeyCode::Enter => self.drill_down(),
             KeyCode::Left | KeyCode::Char('h') => self.drill_up(),
-            
+
             // File ops
             KeyCode::Char('o') => {
                 if let Some(i) = self.list_state.selected() {
@@ -154,7 +183,7 @@ impl FileManagerState {
                 }
             }
             KeyCode::Char('d') => {
-                 // Basic deletion - realistically would ask for confirm
+                // Basic deletion - realistically would ask for confirm
                 if let Some(i) = self.list_state.selected() {
                     if let Some(entry) = self.current_entries.get(i) {
                         let path = self.current_dir.join(&entry.name);
@@ -208,64 +237,119 @@ pub fn render_file_manager(f: &mut ratatui::Frame, state: &mut FileManagerState,
         .split(main_area);
 
     // ── Parent pane
-    let p_items: Vec<ListItem> = state.parent_entries.iter().map(|e| {
-        let prefix = if e.is_dir { "▸ " } else { "  " };
-        let name = &e.name;
-        ListItem::new(Line::from(Span::styled(format!("{}{}", prefix, name), theme::dim())))
-    }).collect();
-    let parent_name = state.current_dir.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or("/");
-    let p_list = List::new(p_items)
-        .block(Block::default().borders(Borders::ALL).border_style(theme::border()).title(Span::styled(parent_name, theme::grid_header())));
+    let p_items: Vec<ListItem> = state
+        .parent_entries
+        .iter()
+        .map(|e| {
+            let prefix = if e.is_dir { "▸ " } else { "  " };
+            let name = &e.name;
+            ListItem::new(Line::from(Span::styled(
+                format!("{}{}", prefix, name),
+                theme::dim(),
+            )))
+        })
+        .collect();
+    let parent_name = state
+        .current_dir
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("/");
+    let p_list = List::new(p_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(theme::border())
+            .title(Span::styled(parent_name, theme::grid_header())),
+    );
     f.render_widget(p_list, columns[0]);
 
     // ── Current pane
-    let c_items: Vec<ListItem> = state.current_entries.iter().enumerate().map(|(i, e)| {
-        let is_selected = state.list_state.selected() == Some(i);
-        let prefix = if e.is_dir { (if is_selected { "▸ " } else { "▸ " }) } else { "  " };
-        
-        let mut style = if is_selected {
-            theme::highlight()
-        } else {
-            Style::default().fg(theme::text())
-        };
+    let c_items: Vec<ListItem> = state
+        .current_entries
+        .iter()
+        .enumerate()
+        .map(|(i, e)| {
+            let is_selected = state.list_state.selected() == Some(i);
+            let prefix = if e.is_dir {
+                if is_selected { "▸ " } else { "▸ " } 
+            } else {
+                "  "
+            };
 
-        // Render name
-        let name = &e.name;
-        
-        // "Fire gradient" selected colorization simulation
-        // The lipgloss-rs example uses a CIELAB gradient mapping. Since we can't emit ANSI raw safely to ratatui ListItem easily anymore,
-        // we map it manually to a style using ratatui's RGB if selected.
-        if is_selected {
-            // Hot orange-red to yellow fire gradient mapped to foreground text
-            // For true gradient we'd need ansi-to-tui to span each character. 
-            // Instead we just use the vibrant overlay background + hot text
-            style = Style::default().bg(theme::overlay_color()).fg(theme::hot_pink()).add_modifier(Modifier::BOLD);
-        }
+            let mut style = if is_selected {
+                theme::highlight()
+            } else {
+                Style::default().fg(theme::text())
+            };
 
-        ListItem::new(Line::from(vec![
-            Span::styled(prefix, if is_selected { theme::search_label() } else { Style::default() }),
-            Span::styled(name.clone(), style),
-        ]))
-    }).collect();
-    let current_name = state.current_dir.file_name().and_then(|n| n.to_str()).unwrap_or("/");
-    let c_list = List::new(c_items)
-        .block(Block::default().borders(Borders::ALL).border_style(theme::border()).title(Span::styled(current_name, theme::grid_header())));
+            // Render name
+            let name = &e.name;
+
+            // "Fire gradient" selected colorization simulation
+            // The lipgloss-rs example uses a CIELAB gradient mapping. Since we can't emit ANSI raw safely to ratatui ListItem easily anymore,
+            // we map it manually to a style using ratatui's RGB if selected.
+            if is_selected {
+                // Hot orange-red to yellow fire gradient mapped to foreground text
+                // For true gradient we'd need ansi-to-tui to span each character.
+                // Instead we just use the vibrant overlay background + hot text
+                style = Style::default()
+                    .bg(theme::overlay_color())
+                    .fg(theme::hot_pink())
+                    .add_modifier(Modifier::BOLD);
+            }
+
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    prefix,
+                    if is_selected {
+                        theme::search_label()
+                    } else {
+                        Style::default()
+                    },
+                ),
+                Span::styled(name.clone(), style),
+            ]))
+        })
+        .collect();
+    let current_name = state
+        .current_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("/");
+    let c_list = List::new(c_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(theme::border())
+            .title(Span::styled(current_name, theme::grid_header())),
+    );
     f.render_stateful_widget(c_list, columns[1], &mut state.list_state);
 
     // ── Preview pane
-    let preview_lines: Vec<Line> = state.preview_text.iter().map(|s| Line::from(s.as_str())).collect();
+    let preview_lines: Vec<Line> = state
+        .preview_text
+        .iter()
+        .map(|s| Line::from(s.as_str()))
+        .collect();
     let preview = Paragraph::new(preview_lines)
         .wrap(Wrap { trim: false })
-        .block(Block::default().borders(Borders::ALL).border_style(theme::border()).title(Span::styled(" Preview ", theme::grid_header())));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(theme::border())
+                .title(Span::styled(" Preview ", theme::grid_header())),
+        );
     f.render_widget(preview, columns[2]);
 
     // ── Bottom help
-    let help_text = "[↑↓] nav   [←→] in/out   [d] del   [o] open   [e] edit   [m] move   [p] paste   [q] back";
-    let help = Paragraph::new(Span::styled(help_text, theme::dim()))
-        .block(Block::default().borders(Borders::ALL).border_style(theme::border()));
+    let help_text =
+        "[↑↓] nav   [←→] in/out   [d] del   [o] open   [e] edit   [m] move   [p] paste   [q] back";
+    let help = Paragraph::new(Span::styled(help_text, theme::dim())).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(theme::border()),
+    );
     f.render_widget(help, chunks[1]);
 }
-
 
 // --- Helpers ---
 
@@ -284,7 +368,9 @@ fn read_dir(path: &Path) -> Vec<FileEntry> {
     }
     // Sort dirs first, then alphabetical
     entries.sort_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     entries
 }
@@ -293,7 +379,7 @@ fn generate_preview(path: &Path, is_dir: bool) -> Vec<String> {
     let mut lines = Vec::new();
     if is_dir {
         let entries = read_dir(path);
-        lines.push(format!("📁 Directory"));
+        lines.push("📁 Directory".to_string());
         lines.push(format!("Contains {} items", entries.len()));
         lines.push("".to_string());
         for e in entries.iter().take(20) {

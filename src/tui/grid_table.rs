@@ -1,3 +1,4 @@
+use super::theme;
 /// GridTable — a ratatui widget that renders a table with real Unicode grid lines
 /// drawn directly into the terminal buffer.
 ///
@@ -11,7 +12,6 @@ use ratatui::{
     text::Span,
     widgets::Widget,
 };
-use super::theme;
 
 /// A single column definition
 pub struct Column {
@@ -33,7 +33,7 @@ pub struct GridRow {
 pub struct GridTable<'a> {
     pub columns: &'a [Column],
     pub rows: &'a [GridRow],
-    pub selected: Option<usize>,   // 0-indexed selected row (within current page)
+    pub selected: Option<usize>, // 0-indexed selected row (within current page)
     pub header_style: Style,
     pub separator_style: Style,
     pub selected_style: Style,
@@ -96,9 +96,13 @@ impl<'a> Widget for GridTable<'a> {
                 x += w + 1;
             }
             // Left and right T-junctions
-            buf.get_mut(area.x, sep_y).set_symbol("├").set_style(self.separator_style);
+            buf.get_mut(area.x, sep_y)
+                .set_symbol("├")
+                .set_style(self.separator_style);
             if area.x + area.width > 0 {
-                buf.get_mut(area.x + area.width - 1, sep_y).set_symbol("┤").set_style(self.separator_style);
+                buf.get_mut(area.x + area.width - 1, sep_y)
+                    .set_symbol("┤")
+                    .set_style(self.separator_style);
             }
         }
 
@@ -113,7 +117,11 @@ impl<'a> Widget for GridTable<'a> {
             }
 
             let is_selected = self.selected == Some(row_idx);
-            let row_bg = if is_selected { self.selected_style } else { Style::default().bg(theme::bg_color()) };
+            let row_bg = if is_selected {
+                self.selected_style
+            } else {
+                Style::default().bg(theme::bg_color())
+            };
 
             // Fill row background
             for fill_x in (area.x + 1)..(area.x + area.width - 1) {
@@ -128,7 +136,7 @@ impl<'a> Widget for GridTable<'a> {
             }
 
             x = area.x + 1;
-            for (col_idx, col) in self.columns.iter().enumerate() {
+            for (col_idx, _col) in self.columns.iter().enumerate() {
                 let w = widths[col_idx];
                 if let Some(cell) = row.cells.get(col_idx) {
                     let text = truncate_pad(&cell.text, w.saturating_sub(1) as usize);
@@ -189,18 +197,28 @@ fn truncate_pad(text: &str, max: usize) -> String {
 fn draw_box(buf: &mut Buffer, area: Rect, style: Style) {
     // Corners
     buf.get_mut(area.x, area.y).set_symbol("┌").set_style(style);
-    buf.get_mut(area.x + area.width - 1, area.y).set_symbol("┐").set_style(style);
-    buf.get_mut(area.x, area.y + area.height - 1).set_symbol("└").set_style(style);
-    buf.get_mut(area.x + area.width - 1, area.y + area.height - 1).set_symbol("┘").set_style(style);
+    buf.get_mut(area.x + area.width - 1, area.y)
+        .set_symbol("┐")
+        .set_style(style);
+    buf.get_mut(area.x, area.y + area.height - 1)
+        .set_symbol("└")
+        .set_style(style);
+    buf.get_mut(area.x + area.width - 1, area.y + area.height - 1)
+        .set_symbol("┘")
+        .set_style(style);
     // Top and bottom edges
     for x in (area.x + 1)..(area.x + area.width - 1) {
         buf.get_mut(x, area.y).set_symbol("─").set_style(style);
-        buf.get_mut(x, area.y + area.height - 1).set_symbol("─").set_style(style);
+        buf.get_mut(x, area.y + area.height - 1)
+            .set_symbol("─")
+            .set_style(style);
     }
     // Left and right edges
     for y in (area.y + 1)..(area.y + area.height - 1) {
         buf.get_mut(area.x, y).set_symbol("│").set_style(style);
-        buf.get_mut(area.x + area.width - 1, y).set_symbol("│").set_style(style);
+        buf.get_mut(area.x + area.width - 1, y)
+            .set_symbol("│")
+            .set_style(style);
     }
 }
 
@@ -230,13 +248,20 @@ fn compute_widths(columns: &[Column], total_width: u16) -> Vec<u16> {
 
     // Second pass: distribute remaining to Percentage and Min
     let remaining = available.saturating_sub(used);
-    let flexible_count = columns.iter().filter(|c| !matches!(c.width, Constraint::Length(_))).count();
-    let per_flex = if flexible_count > 0 { remaining / flexible_count as u16 } else { 0 };
+    let flexible_count = columns
+        .iter()
+        .filter(|c| !matches!(c.width, Constraint::Length(_)))
+        .count();
+    let per_flex = if flexible_count > 0 {
+        remaining / flexible_count as u16
+    } else {
+        0
+    };
 
     for (i, col) in columns.iter().enumerate() {
         match col.width {
             Constraint::Percentage(p) => {
-                widths[i] = (available * p as u16 / 100).min(remaining);
+                widths[i] = (available * p / 100).min(remaining);
             }
             Constraint::Min(n) => {
                 widths[i] = per_flex.max(n);

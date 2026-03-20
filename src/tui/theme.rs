@@ -33,7 +33,7 @@ pub const FIRE_PALETTE: Palette = Palette {
     electric_cyan: Color::Rgb(255, 220, 0),   // Bright Yellow
     neon_green: Color::Rgb(255, 60, 0),       // Red-Orange
     vivid_purple: Color::Rgb(200, 50, 0),     // Deep Orange
-    light_purple: Color::Rgb(255, 180, 100),  // Light Orange 
+    light_purple: Color::Rgb(255, 180, 100),  // Light Orange
     bright_yellow: Color::Rgb(255, 255, 100), // Pure Yellow
     neon_orange: Color::Rgb(255, 140, 0),     // Neon Orange
     bright_red: Color::Rgb(255, 30, 30),      // Pure Red
@@ -143,7 +143,7 @@ pub fn set_theme(name: &str) {
         "Forest" => FOREST_PALETTE,
         "Purple Dream" => PURPLE_DREAM_PALETTE,
         // Any other or "Fire" falls back to Fire
-        _ => FIRE_PALETTE, 
+        _ => FIRE_PALETTE,
     };
     if let Ok(mut theme) = THEME.write() {
         *theme = p;
@@ -167,41 +167,139 @@ macro_rules! style_getter {
 
 style_getter!(dim, text_dim);
 
-pub fn title() -> Style      { Style::default().fg(THEME.read().unwrap().text).add_modifier(Modifier::BOLD) }
-pub fn highlight() -> Style  { let t = THEME.read().unwrap(); Style::default().fg(t.text).bg(t.overlay).add_modifier(Modifier::BOLD) }
-pub fn active_tab() -> Style { let t = THEME.read().unwrap(); Style::default().fg(Color::White).bg(t.hot_pink).add_modifier(Modifier::BOLD) }
-pub fn tab() -> Style        { let t = THEME.read().unwrap(); Style::default().fg(t.light_purple).bg(t.surface) }
+pub fn title() -> Style {
+    Style::default()
+        .fg(THEME.read().unwrap().text)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn highlight() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default()
+        .fg(t.text)
+        .bg(t.overlay)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn active_tab() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default()
+        .fg(Color::White)
+        .bg(t.hot_pink)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn tab() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default().fg(t.light_purple).bg(t.surface)
+}
 
-pub fn number() -> Style     { Style::default().fg(THEME.read().unwrap().electric_cyan).add_modifier(Modifier::BOLD) }
-pub fn pkg_name() -> Style   { Style::default().fg(THEME.read().unwrap().text).add_modifier(Modifier::BOLD) }
-pub fn version() -> Style    { Style::default().fg(THEME.read().unwrap().neon_orange) }
-pub fn desc() -> Style       { Style::default().fg(THEME.read().unwrap().text_dim) }
-pub fn source_tag() -> Style { Style::default().fg(THEME.read().unwrap().hot_pink) }
-pub fn success() -> Style    { Style::default().fg(THEME.read().unwrap().neon_green).add_modifier(Modifier::BOLD) }
-pub fn error() -> Style      { Style::default().fg(THEME.read().unwrap().bright_red).add_modifier(Modifier::BOLD) }
+pub fn number() -> Style {
+    Style::default()
+        .fg(THEME.read().unwrap().electric_cyan)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn pkg_name() -> Style {
+    Style::default()
+        .fg(THEME.read().unwrap().text)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn version() -> Style {
+    Style::default().fg(THEME.read().unwrap().neon_orange)
+}
+pub fn desc() -> Style {
+    Style::default().fg(THEME.read().unwrap().text_dim)
+}
+pub fn source_tag() -> Style {
+    Style::default().fg(THEME.read().unwrap().hot_pink)
+}
+pub fn success() -> Style {
+    Style::default()
+        .fg(THEME.read().unwrap().neon_green)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn error() -> Style {
+    Style::default()
+        .fg(THEME.read().unwrap().bright_red)
+        .add_modifier(Modifier::BOLD)
+}
 
-pub fn border() -> Style     { Style::default().fg(THEME.read().unwrap().border) }
-pub fn grid() -> Style       { Style::default().fg(THEME.read().unwrap().grid) }
-pub fn grid_header() -> Style { Style::default().fg(THEME.read().unwrap().vivid_purple).add_modifier(Modifier::BOLD) }
-pub fn grid_separator() -> Style { Style::default().fg(THEME.read().unwrap().grid) }
+pub fn border() -> Style {
+    Style::default().fg(THEME.read().unwrap().border)
+}
+pub fn grid() -> Style {
+    Style::default().fg(THEME.read().unwrap().grid)
+}
+pub fn grid_header() -> Style {
+    Style::default()
+        .fg(THEME.read().unwrap().vivid_purple)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn grid_separator() -> Style {
+    Style::default().fg(THEME.read().unwrap().grid)
+}
 
-pub fn progress() -> Style   { let t = THEME.read().unwrap(); Style::default().fg(t.hot_pink).bg(t.overlay) }
-pub fn progress_bar() -> Style { let t = THEME.read().unwrap(); Style::default().fg(t.teal).bg(t.surface) }
-pub fn input() -> Style      { let t = THEME.read().unwrap(); Style::default().fg(t.text).bg(t.surface) }
-pub fn search_label() -> Style { Style::default().fg(THEME.read().unwrap().hot_pink).add_modifier(Modifier::BOLD) }
+pub fn progress() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default().fg(t.hot_pink).bg(t.overlay)
+}
+pub fn progress_bar() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default().fg(t.teal).bg(t.surface)
+}
+pub fn input() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default().fg(t.text).bg(t.surface)
+}
+pub fn search_label() -> Style {
+    Style::default()
+        .fg(THEME.read().unwrap().hot_pink)
+        .add_modifier(Modifier::BOLD)
+}
 
-pub fn status_bar() -> Style { let t = THEME.read().unwrap(); Style::default().fg(Color::Black).bg(t.hot_pink).add_modifier(Modifier::BOLD) }
-pub fn status_text() -> Style { Style::default().fg(THEME.read().unwrap().light_purple) }
+pub fn status_bar() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default()
+        .fg(Color::Black)
+        .bg(t.hot_pink)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn status_text() -> Style {
+    Style::default().fg(THEME.read().unwrap().light_purple)
+}
 
-pub fn btn_yes() -> Style    { let t = THEME.read().unwrap(); Style::default().fg(Color::Black).bg(t.neon_green).add_modifier(Modifier::BOLD) }
-pub fn btn_no() -> Style     { let t = THEME.read().unwrap(); Style::default().fg(Color::Black).bg(t.bright_red).add_modifier(Modifier::BOLD) }
-pub fn btn_dim() -> Style    { let t = THEME.read().unwrap(); Style::default().fg(t.text_dim).bg(t.surface) }
+pub fn btn_yes() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default()
+        .fg(Color::Black)
+        .bg(t.neon_green)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn btn_no() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default()
+        .fg(Color::Black)
+        .bg(t.bright_red)
+        .add_modifier(Modifier::BOLD)
+}
+pub fn btn_dim() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default().fg(t.text_dim).bg(t.surface)
+}
 
 // Export colors heavily used as backgrounds in UI frames directly
-pub fn bg_color() -> Color { THEME.read().unwrap().bg }
-pub fn overlay_color() -> Color { THEME.read().unwrap().overlay }
-pub fn hot_pink() -> Color { THEME.read().unwrap().hot_pink }
-pub fn neon_green() -> Color { THEME.read().unwrap().neon_green }
-pub fn vivid_purple() -> Color { THEME.read().unwrap().vivid_purple }
-pub fn text() -> Color { THEME.read().unwrap().text }
-
+pub fn bg_color() -> Color {
+    THEME.read().unwrap().bg
+}
+pub fn overlay_color() -> Color {
+    THEME.read().unwrap().overlay
+}
+pub fn hot_pink() -> Color {
+    THEME.read().unwrap().hot_pink
+}
+pub fn neon_green() -> Color {
+    THEME.read().unwrap().neon_green
+}
+pub fn vivid_purple() -> Color {
+    THEME.read().unwrap().vivid_purple
+}
+pub fn text() -> Color {
+    THEME.read().unwrap().text
+}
