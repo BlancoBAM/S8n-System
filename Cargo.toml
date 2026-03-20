@@ -1,8 +1,11 @@
 [package]
 name = "s8n"
-version = "0.1.0"
+version = "0.1.1" # Bumped for license + release profiling
 edition = "2021"
 description = "A universal package manager wrapper with a beautiful TUI"
+authors = ["BlancoBAM", "Lilith"]
+repository = "https://github.com/BlancoBAM/S8n-System"
+license = "GPL-3.0"
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
@@ -17,6 +20,13 @@ async-trait = "0.1.89"
 unicode-width = "0.2"
 
 # bubbletea-rs ecosystem for lipgloss-style table grid rendering and gradient progress bars
-bubbletea-rs = { path = "/home/lilith/bubbletea-rs" }
+bubbletea-rs = { git = "https://github.com/whit3rabbit/bubbletea-rs.git" }
 lipgloss-extras = { version = "0.1.1", features = ["full"] }
 rand = "0.8"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Maximize size reduction
+panic = "abort"     # Remove panic unwinding to save size
+strip = true        # Strip symbols from binary
