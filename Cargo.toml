@@ -20,7 +20,7 @@ async-trait = "0.1.89"
 unicode-width = "0.2"
 
 # bubbletea-rs ecosystem for lipgloss-style table grid rendering and gradient progress bars
-bubbletea-rs = { git = "https://github.com/whit3rabbit/bubbletea-rs.git" }
+bubbletea-rs = "0.0.9"
 lipgloss-extras = { version = "0.1.1", features = ["full"] }
 rand = "0.8"
 
