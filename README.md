@@ -6,7 +6,7 @@
 [![Crates.io](https://img.shields.io/crates/v/s8n.svg)](https://crates.io/crates/s8n)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 
-S8n (pronounced "system") is a fast, visually stunning System Manager, Unified Package Manager, and File Manager built in Rust. It provides native terminal gradients, Miller-column file browsing, and cross-package-manager fuzzy search — all from a single, beautiful terminal interface.
+S8n is a fast, visually stunning System Manager, Unified Package Manager, and File Manager built in Rust. It provides native terminal gradients, Miller-column file browsing, and cross-package-manager fuzzy search — all from a single, beautiful terminal interface. It is designed specifically for Lilith Linux and Katie.
 
 ---
 
