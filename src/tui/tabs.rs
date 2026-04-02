@@ -28,7 +28,7 @@ impl<'a> Widget for TabBar<'a> {
 
         // Clear entire row with background color
         for x in area.x..area.x.saturating_add(area.width).min(buf.area.width) {
-            buf.get_mut(x, area.y)
+            buf[(x, area.y)]
                 .set_char(' ')
                 .set_bg(theme::bg_color())
                 .set_fg(theme::bg_color());

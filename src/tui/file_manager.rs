@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 pub struct FileEntry {
     name: String,
     is_dir: bool,
+    #[allow(dead_code)]
     size: u64,
 }
 
@@ -270,15 +271,7 @@ pub fn render_file_manager(f: &mut ratatui::Frame, state: &mut FileManagerState,
         .enumerate()
         .map(|(i, e)| {
             let is_selected = state.list_state.selected() == Some(i);
-            let prefix = if e.is_dir {
-                if is_selected {
-                    "▸ "
-                } else {
-                    "▸ "
-                }
-            } else {
-                "  "
-            };
+            let prefix = if e.is_dir { "▸ " } else { "  " };
 
             let mut style = if is_selected {
                 theme::highlight()

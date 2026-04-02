@@ -957,6 +957,21 @@ enum Action {
 
 fn handle_input_key(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) -> Option<Action> {
     match key {
+        KeyCode::Char('v') => {
+            if !app.installed_loaded {
+                return Some(Action::LoadInstalled);
+            } else {
+                app.mode = Mode::InstalledView;
+                app.page = 0;
+                app.list_state.select(if app.installed_results.is_empty() {
+                    None
+                } else {
+                    Some(0)
+                });
+                app.search_input.clear();
+                app.cursor_pos = 0;
+            }
+        }
         KeyCode::Char(c) => {
             app.search_input.insert(app.cursor_pos, c);
             app.cursor_pos += 1;
@@ -995,21 +1010,6 @@ fn handle_input_key(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) -> Op
                     app.list_state.select(Some(0));
                     app.update_source_options();
                 }
-            }
-        }
-        KeyCode::Char('v') => {
-            if !app.installed_loaded {
-                return Some(Action::LoadInstalled);
-            } else {
-                app.mode = Mode::InstalledView;
-                app.page = 0;
-                app.list_state.select(if app.installed_results.is_empty() {
-                    None
-                } else {
-                    Some(0)
-                });
-                app.search_input.clear();
-                app.cursor_pos = 0;
             }
         }
         KeyCode::Esc => app.should_quit = true,
@@ -1409,7 +1409,7 @@ pub async fn run_search_tui_inner(
                                 .or_else(|| managers.first());
                             if let Some(pm) = pm {
                                 for (i, pkg) in pkgs.iter().enumerate() {
-                                    let result = pm.install(&[pkg.clone()]).await;
+                                    let result = pm.install(std::slice::from_ref(pkg)).await;
                                     if let Some(item) = app.progress_items.get_mut(i) {
                                         item.done = true;
                                         item.success = matches!(result, PmResult::Success);
@@ -1427,7 +1427,7 @@ pub async fn run_search_tui_inner(
                                 .or_else(|| managers.first());
                             if let Some(pm) = pm {
                                 for (i, pkg) in pkgs.iter().enumerate() {
-                                    let result = pm.remove(&[pkg.clone()]).await;
+                                    let result = pm.remove(std::slice::from_ref(pkg)).await;
                                     if let Some(item) = app.progress_items.get_mut(i) {
                                         item.done = true;
                                         item.success = matches!(result, PmResult::Success);
@@ -1799,8 +1799,8 @@ pub async fn run_progress_tui(
 
     for (i, pkg) in items.iter().enumerate() {
         let result = match action {
-            "install" => pm.install(&[pkg.clone()]).await,
-            "remove" => pm.remove(&[pkg.clone()]).await,
+            "install" => pm.install(std::slice::from_ref(pkg)).await,
+            "remove" => pm.remove(std::slice::from_ref(pkg)).await,
             "update" => pm.update().await,
             _ => PmResult::Error("Unknown action".into()),
         };

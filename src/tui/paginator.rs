@@ -30,9 +30,7 @@ impl Widget for Paginator {
 
         // Page dots with glow animation on active dot
         let max_dots = 9.min(self.total_pages);
-        let start = if self.total_pages <= max_dots {
-            0
-        } else if self.current_page < max_dots / 2 {
+        let start = if self.total_pages <= max_dots || self.current_page < max_dots / 2 {
             0
         } else if self.current_page > self.total_pages - max_dots / 2 - 1 {
             self.total_pages - max_dots

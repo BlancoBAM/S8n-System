@@ -66,7 +66,7 @@ impl<'a> Widget for GridTable<'a> {
             if col_idx < self.columns.len() - 1 {
                 let sep_x = x + w;
                 if sep_x < area.x + area.width - 1 {
-                    buf.get_mut(sep_x, header_y)
+                    buf[(sep_x, header_y)]
                         .set_symbol("│")
                         .set_style(self.separator_style);
                 }
@@ -78,17 +78,17 @@ impl<'a> Widget for GridTable<'a> {
         let sep_y = area.y + 2;
         if sep_y < area.y + area.height - 1 {
             x = area.x + 1;
-            for col_idx in 0..self.columns.len() {
+            for (col_idx, _col) in widths.iter().enumerate().take(self.columns.len()) {
                 let w = widths[col_idx];
                 for fill_x in x..(x + w).min(area.x + area.width - 1) {
-                    buf.get_mut(fill_x, sep_y)
+                    buf[(fill_x, sep_y)]
                         .set_symbol("─")
                         .set_style(self.separator_style);
                 }
                 if col_idx < self.columns.len() - 1 {
                     let sep_x = x + w;
                     if sep_x < area.x + area.width - 1 {
-                        buf.get_mut(sep_x, sep_y)
+                        buf[(sep_x, sep_y)]
                             .set_symbol("┼")
                             .set_style(self.separator_style);
                     }
@@ -96,11 +96,11 @@ impl<'a> Widget for GridTable<'a> {
                 x += w + 1;
             }
             // Left and right T-junctions
-            buf.get_mut(area.x, sep_y)
+            buf[(area.x, sep_y)]
                 .set_symbol("├")
                 .set_style(self.separator_style);
             if area.x + area.width > 0 {
-                buf.get_mut(area.x + area.width - 1, sep_y)
+                buf[(area.x + area.width - 1, sep_y)]
                     .set_symbol("┤")
                     .set_style(self.separator_style);
             }
@@ -125,12 +125,12 @@ impl<'a> Widget for GridTable<'a> {
 
             // Fill row background
             for fill_x in (area.x + 1)..(area.x + area.width - 1) {
-                buf.get_mut(fill_x, row_y).set_style(row_bg);
+                buf[(fill_x, row_y)].set_style(row_bg);
             }
 
             // Draw selection indicator
             if is_selected {
-                buf.get_mut(area.x, row_y)
+                buf[(area.x, row_y)]
                     .set_symbol("▌")
                     .set_style(Style::default().fg(theme::hot_pink()));
             }
@@ -154,7 +154,7 @@ impl<'a> Widget for GridTable<'a> {
                 if col_idx < self.columns.len() - 1 {
                     let sep_x = x + w;
                     if sep_x < area.x + area.width - 1 {
-                        buf.get_mut(sep_x, row_y)
+                        buf[(sep_x, row_y)]
                             .set_symbol("│")
                             .set_style(self.separator_style);
                     }
@@ -196,27 +196,27 @@ fn truncate_pad(text: &str, max: usize) -> String {
 /// Draw a single-line box border around an area
 fn draw_box(buf: &mut Buffer, area: Rect, style: Style) {
     // Corners
-    buf.get_mut(area.x, area.y).set_symbol("┌").set_style(style);
-    buf.get_mut(area.x + area.width - 1, area.y)
+    buf[(area.x, area.y)].set_symbol("┌").set_style(style);
+    buf[(area.x + area.width - 1, area.y)]
         .set_symbol("┐")
         .set_style(style);
-    buf.get_mut(area.x, area.y + area.height - 1)
+    buf[(area.x, area.y + area.height - 1)]
         .set_symbol("└")
         .set_style(style);
-    buf.get_mut(area.x + area.width - 1, area.y + area.height - 1)
+    buf[(area.x + area.width - 1, area.y + area.height - 1)]
         .set_symbol("┘")
         .set_style(style);
     // Top and bottom edges
     for x in (area.x + 1)..(area.x + area.width - 1) {
-        buf.get_mut(x, area.y).set_symbol("─").set_style(style);
-        buf.get_mut(x, area.y + area.height - 1)
+        buf[(x, area.y)].set_symbol("─").set_style(style);
+        buf[(x, area.y + area.height - 1)]
             .set_symbol("─")
             .set_style(style);
     }
     // Left and right edges
     for y in (area.y + 1)..(area.y + area.height - 1) {
-        buf.get_mut(area.x, y).set_symbol("│").set_style(style);
-        buf.get_mut(area.x + area.width - 1, y)
+        buf[(area.x, y)].set_symbol("│").set_style(style);
+        buf[(area.x + area.width - 1, y)]
             .set_symbol("│")
             .set_style(style);
     }
