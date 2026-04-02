@@ -41,6 +41,11 @@ pub trait PackageManager: Send + Sync {
     async fn install(&self, packages: &[String]) -> PmResult;
     async fn remove(&self, packages: &[String]) -> PmResult;
     async fn update(&self) -> PmResult;
+
+    /// List installed packages with captured output
+    async fn list_installed(&self) -> Result<Vec<PackageInfo>, String> {
+        Ok(vec![])
+    }
 }
 
 /// Helper function to run a command and wait for standard success/failure without capturing output

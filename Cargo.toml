@@ -1,11 +1,21 @@
 [package]
 name = "s8n"
-version = "0.1.1" # Bumped for license + release profiling
+version = "0.2.0"
 edition = "2021"
-description = "A universal package manager wrapper with a beautiful TUI"
+description = "A beautiful unified system manager, package manager, and file manager TUI — built for Lilith Linux and Katie"
 authors = ["BlancoBAM", "Lilith"]
 repository = "https://github.com/BlancoBAM/S8n-System"
 license = "GPL-3.0"
+readme = "README.md"
+keywords = ["package-manager", "tui", "system-manager", "file-manager", "terminal"]
+categories = ["command-line-utilities"]
+documentation = "https://docs.rs/s8n"
+homepage = "https://github.com/BlancoBAM/S8n-System"
+exclude = [
+    "target/",
+    "screenshots/",
+    ".github/",
+]
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
@@ -30,3 +40,28 @@ lto = true          # Enable Link Time Optimization
 codegen-units = 1   # Maximize size reduction
 panic = "abort"     # Remove panic unwinding to save size
 strip = true        # Strip symbols from binary
+
+# cargo-deb configuration for .deb package building
+[package.metadata.deb]
+name = "s8n"
+maintainer = "Lilith <lilith@lilith-linux.dev>"
+copyright = "2026, BlancoBAM, Lilith <lilith@lilith-linux.dev>"
+license-file = ["LICENSE", "4"]
+extended-description = """\
+S8n (Katie) — A beautiful unified system manager, package manager, and file manager TUI.
+
+Built specifically for Lilith Linux and Katie. Features:
+- Unified package management across 10+ sources (apt, flatpak, snap, brew, npm, pip, etc.)
+- Installed packages view with alphabetical sorting and fuzzy search
+- Miller-column file manager with safe directory traversal
+- Dynamic theming with 5 built-in palettes
+- Animated gradient progress bars and braille spinners
+- skim (fzf) integration for fuzzy package search
+"""
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/s8n", "usr/bin/s8n", "755"],
+    ["README.md", "usr/share/doc/s8n/README.md", "644"],
+    ["LICENSE", "usr/share/doc/s8n/LICENSE", "644"],
+]

@@ -14,6 +14,7 @@ pub struct GenericWrapper {
     pub install_cmd: Vec<String>,
     pub remove_cmd: Vec<String>,
     pub update_cmd: Vec<String>,
+    pub list_cmd: Vec<String>,
 }
 
 #[async_trait]
@@ -77,6 +78,18 @@ impl PackageManager for GenericWrapper {
         }
         run_command_quiet(&mut cmd).await
     }
+
+    async fn list_installed(&self) -> Result<Vec<PackageInfo>, String> {
+        if self.list_cmd.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut cmd = Command::new(&self.binary);
+        for arg in &self.list_cmd {
+            cmd.arg(arg);
+        }
+        let output = run_command_captured(&mut cmd).await?;
+        Ok(parse_list_output(&self.name, &output))
+    }
 }
 
 /// Parse search output from various package managers into structured PackageInfo
@@ -93,6 +106,23 @@ fn parse_search_output(source: &str, output: &str) -> Vec<PackageInfo> {
         _ => parse_generic_output(output, source),
     };
     // Global filter: remove blank-name entries produced by any parser
+    results.retain(|p| !p.name.trim().is_empty() && p.name.chars().any(|c| c.is_alphanumeric()));
+    results
+}
+
+/// Parse list-installed output from package managers into structured PackageInfo
+fn parse_list_output(source: &str, output: &str) -> Vec<PackageInfo> {
+    let mut results = match source {
+        "apt" => parse_apt_list_output(output, source),
+        "flatpak" => parse_flatpak_list_output(output, source),
+        "snap" => parse_snap_list_output(output, source),
+        "brew" => parse_brew_list_output(output, source),
+        "npm" => parse_npm_list_output(output, source),
+        "pip" => parse_pip_list_output(output, source),
+        "pacstall" => parse_pacstall_list_output(output, source),
+        "soar" => parse_soar_list_output(output, source),
+        _ => parse_generic_output(output, source),
+    };
     results.retain(|p| !p.name.trim().is_empty() && p.name.chars().any(|c| c.is_alphanumeric()));
     results
 }
@@ -361,7 +391,187 @@ fn parse_generic_output(output: &str, source: &str) -> Vec<PackageInfo> {
             version: String::new(),
             description: String::new(),
             source: source.to_string(),
-            installed: false,
+            installed: true,
+        })
+        .collect()
+}
+
+// ── List-installed parsers ───────────────────────────────────────────────────
+
+fn parse_apt_list_output(output: &str, source: &str) -> Vec<PackageInfo> {
+    output
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with("Listing"))
+        .map(|l| {
+            let parts: Vec<&str> = l.split_whitespace().collect();
+            let name = parts.first().unwrap_or(&"").to_string();
+            let version = parts.get(1).unwrap_or(&"").to_string();
+            PackageInfo {
+                name,
+                version,
+                description: String::new(),
+                source: source.to_string(),
+                installed: true,
+            }
+        })
+        .collect()
+}
+
+fn parse_flatpak_list_output(output: &str, source: &str) -> Vec<PackageInfo> {
+    output
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with("Name"))
+        .map(|l| {
+            let parts: Vec<&str> = l.split('\t').collect();
+            let name = parts.first().unwrap_or(&"").trim().to_string();
+            let version = parts.get(3).unwrap_or(&"").trim().to_string();
+            PackageInfo {
+                name,
+                version,
+                description: String::new(),
+                source: source.to_string(),
+                installed: true,
+            }
+        })
+        .collect()
+}
+
+fn parse_snap_list_output(output: &str, source: &str) -> Vec<PackageInfo> {
+    output
+        .lines()
+        .enumerate()
+        .filter(|(i, l)| *i > 0 && !l.trim().is_empty())
+        .map(|(_, l)| {
+            let parts: Vec<&str> = l.split_whitespace().collect();
+            let name = parts.first().unwrap_or(&"").to_string();
+            let version = parts.get(1).unwrap_or(&"").to_string();
+            PackageInfo {
+                name,
+                version,
+                description: String::new(),
+                source: source.to_string(),
+                installed: true,
+            }
+        })
+        .collect()
+}
+
+fn parse_brew_list_output(output: &str, source: &str) -> Vec<PackageInfo> {
+    output
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.contains("==>"))
+        .map(|l| {
+            let parts: Vec<&str> = l.split_whitespace().collect();
+            let name = parts.first().unwrap_or(&"").to_string();
+            let version = parts.get(1).unwrap_or(&"").to_string();
+            PackageInfo {
+                name,
+                version,
+                description: String::new(),
+                source: source.to_string(),
+                installed: true,
+            }
+        })
+        .collect()
+}
+
+fn parse_npm_list_output(output: &str, source: &str) -> Vec<PackageInfo> {
+    let mut results = Vec::new();
+    for line in output.lines() {
+        let line = line.trim();
+        if line.is_empty()
+            || line.starts_with('/')
+            || line.contains("@") && line.starts_with("├")
+            || line.starts_with("└")
+        {
+            continue;
+        }
+        // npm ls output: package@version
+        if let Some(at_pos) = line.find('@') {
+            let name = line[..at_pos]
+                .trim()
+                .trim_start_matches("├── ")
+                .trim_start_matches("└── ");
+            let version = line[at_pos + 1..].trim();
+            if !name.is_empty() && !name.contains('/') {
+                results.push(PackageInfo {
+                    name: name.to_string(),
+                    version: version.to_string(),
+                    description: String::new(),
+                    source: source.to_string(),
+                    installed: true,
+                });
+            }
+        }
+    }
+    results
+}
+
+fn parse_pip_list_output(output: &str, source: &str) -> Vec<PackageInfo> {
+    output
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with("Package") && !l.starts_with("---"))
+        .map(|l| {
+            let parts: Vec<&str> = l.split_whitespace().collect();
+            let name = parts.first().unwrap_or(&"").to_string();
+            let version = parts.get(1).unwrap_or(&"").to_string();
+            PackageInfo {
+                name,
+                version,
+                description: String::new(),
+                source: source.to_string(),
+                installed: true,
+            }
+        })
+        .collect()
+}
+
+fn parse_pacstall_list_output(output: &str, source: &str) -> Vec<PackageInfo> {
+    output
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('['))
+        .map(|l| {
+            let trimmed = l.trim();
+            let parts: Vec<&str> = trimmed.splitn(2, char::is_whitespace).collect();
+            let name = parts.first().unwrap_or(&"").to_string();
+            let version = parts.get(1).unwrap_or(&"").trim().to_string();
+            PackageInfo {
+                name,
+                version,
+                description: String::new(),
+                source: source.to_string(),
+                installed: true,
+            }
+        })
+        .collect()
+}
+
+fn parse_soar_list_output(output: &str, source: &str) -> Vec<PackageInfo> {
+    output
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.is_empty()
+                && !t.starts_with('┌')
+                && !t.starts_with('│')
+                && !t.starts_with('└')
+                && !t.starts_with('├')
+                && !t.starts_with('─')
+                && !t.starts_with('+')
+                && !t.starts_with('-')
+                && !t.contains("Total")
+                && !t.contains("Installed")
+                && !t.contains("Available")
+        })
+        .map(|l| {
+            let parts: Vec<&str> = l.trim().splitn(2, ' ').collect();
+            PackageInfo {
+                name: parts.first().unwrap_or(&"").to_string(),
+                version: parts.get(1).unwrap_or(&"").to_string(),
+                description: String::new(),
+                source: source.to_string(),
+                installed: true,
+            }
         })
         .collect()
 }
@@ -375,6 +585,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["install".into(), "-y".into()],
             remove_cmd: vec!["remove".into(), "-y".into()],
             update_cmd: vec!["upgrade".into(), "-y".into()],
+            list_cmd: vec!["list".into(), "--installed".into()],
         }),
         Box::new(GenericWrapper {
             name: "pacstall".into(),
@@ -383,6 +594,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["-I".into()],
             remove_cmd: vec!["-R".into()],
             update_cmd: vec!["-U".into(), "all".into()],
+            list_cmd: vec!["-L".into()],
         }),
         Box::new(GenericWrapper {
             name: "flatpak".into(),
@@ -391,6 +603,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["install".into(), "-y".into()],
             remove_cmd: vec!["uninstall".into(), "-y".into()],
             update_cmd: vec!["update".into(), "-y".into()],
+            list_cmd: vec!["list".into()],
         }),
         Box::new(GenericWrapper {
             name: "snap".into(),
@@ -399,6 +612,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["install".into()],
             remove_cmd: vec!["remove".into()],
             update_cmd: vec!["refresh".into()],
+            list_cmd: vec!["list".into()],
         }),
         Box::new(GenericWrapper {
             name: "brew".into(),
@@ -407,6 +621,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["install".into()],
             remove_cmd: vec!["uninstall".into()],
             update_cmd: vec!["upgrade".into()],
+            list_cmd: vec!["list".into()],
         }),
         Box::new(GenericWrapper {
             name: "soar".into(),
@@ -415,6 +630,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["add".into()],
             remove_cmd: vec!["remove".into()],
             update_cmd: vec!["update".into()],
+            list_cmd: vec!["list".into(), "--installed".into()],
         }),
         Box::new(GenericWrapper {
             name: "npm".into(),
@@ -423,6 +639,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["install".into(), "-g".into()],
             remove_cmd: vec!["uninstall".into(), "-g".into()],
             update_cmd: vec!["update".into(), "-g".into()],
+            list_cmd: vec!["list".into(), "-g".into(), "--depth=0".into()],
         }),
         Box::new(GenericWrapper {
             name: "bun".into(),
@@ -431,6 +648,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["add".into(), "-g".into()],
             remove_cmd: vec!["remove".into(), "-g".into()],
             update_cmd: vec!["update".into(), "-g".into()],
+            list_cmd: vec!["pm".into(), "ls".into(), "-g".into()],
         }),
         Box::new(GenericWrapper {
             name: "pip".into(),
@@ -439,6 +657,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec!["install".into()],
             remove_cmd: vec!["uninstall".into(), "-y".into()],
             update_cmd: vec!["install".into(), "--upgrade".into()],
+            list_cmd: vec!["list".into()],
         }),
         Box::new(GenericWrapper {
             name: "topgrade".into(),
@@ -447,6 +666,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             install_cmd: vec![],
             remove_cmd: vec![],
             update_cmd: vec!["--yes".into()],
+            list_cmd: vec![],
         }),
     ]
 }

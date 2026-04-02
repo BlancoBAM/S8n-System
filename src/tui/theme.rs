@@ -201,6 +201,12 @@ pub fn pkg_name() -> Style {
         .fg(THEME.read().unwrap().text)
         .add_modifier(Modifier::BOLD)
 }
+pub fn installed_pkg() -> Style {
+    let t = THEME.read().unwrap();
+    Style::default()
+        .fg(t.neon_green)
+        .add_modifier(Modifier::BOLD)
+}
 pub fn version() -> Style {
     Style::default().fg(THEME.read().unwrap().neon_orange)
 }
@@ -302,4 +308,11 @@ pub fn vivid_purple() -> Color {
 }
 pub fn text() -> Color {
     THEME.read().unwrap().text
+}
+
+/// Returns the theme's gradient color stops for progress bar animation
+/// Returns [start, mid1, mid2, end] for smooth gradient interpolation
+pub fn gradient_stops() -> [Color; 4] {
+    let t = THEME.read().unwrap();
+    [t.hot_pink, t.vivid_purple, t.electric_cyan, t.neon_green]
 }

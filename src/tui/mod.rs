@@ -32,9 +32,7 @@ use ratatui::{
 use std::io::{self, stdout};
 use std::time::Duration;
 
-// bubbletea-rs ecosystem for gradient progress bar and lipgloss-style spinner colors
-use bubbletea_rs::gradient::gradient_filled_segment;
-use lipgloss_extras::lipgloss::{Color as LGColor, Style as LGStyle};
+// lipgloss-style spinner colors
 
 // ── App state ───────────────────────────────────────────────────────────────
 
@@ -52,11 +50,12 @@ pub enum AppMode {
 
 #[derive(Clone, PartialEq)]
 enum Mode {
-    Input,    // typing search query
-    Browse,   // navigating results with ↑↓
-    Confirm,  // install/remove confirmation
-    Progress, // operation running
-    Done,     // finished, press q to exit
+    Input,         // typing search query
+    Browse,        // navigating results with ↑↓
+    Confirm,       // install/remove confirmation
+    Progress,      // operation running
+    Done,          // finished, press q to exit
+    InstalledView, // viewing installed packages system-wide
 }
 
 struct App {
@@ -85,9 +84,14 @@ struct App {
     // Confirm / progress
     confirm_action: String, // "install" or "remove"
     confirm_packages: Vec<String>,
-    pub confirm_selected_yes: bool, // Tracks which button is highlighted
+    confirm_source: String,     // source manager for the confirmed action
+    confirm_selected_yes: bool, // Tracks which button is highlighted
     progress_items: Vec<ProgressItem>,
     status_message: String,
+
+    // Installed packages view
+    installed_results: Vec<PackageInfo>,
+    installed_loaded: bool,
 
     should_quit: bool,
 }
@@ -117,9 +121,12 @@ impl App {
             source_selected: 0,
             confirm_action: String::new(),
             confirm_packages: Vec::new(),
+            confirm_source: String::new(),
             confirm_selected_yes: true,
             progress_items: Vec::new(),
             status_message: String::new(),
+            installed_results: Vec::new(),
+            installed_loaded: false,
             should_quit: false,
         }
     }
@@ -202,6 +209,31 @@ impl App {
             Some(0)
         });
         self.update_source_options();
+        self.mark_installed();
+    }
+
+    /// Mark search results as installed by cross-referencing with installed list
+    fn mark_installed(&mut self) {
+        if self.installed_results.is_empty() {
+            return;
+        }
+        let installed_names: std::collections::HashSet<(String, String)> = self
+            .installed_results
+            .iter()
+            .map(|p| (p.name.clone(), p.source.clone()))
+            .collect();
+        for pkg in &mut self.all_results {
+            if installed_names.contains(&(pkg.name.clone(), pkg.source.clone())) {
+                pkg.installed = true;
+            }
+        }
+        for (_src, pkgs) in &mut self.results_by_source {
+            for pkg in pkgs {
+                if installed_names.contains(&(pkg.name.clone(), pkg.source.clone())) {
+                    pkg.installed = true;
+                }
+            }
+        }
     }
 }
 
@@ -224,6 +256,7 @@ fn render(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) 
             }
             Mode::Progress => render_progress_view(f, app, size),
             Mode::Done => render_done_view(f, app, size),
+            Mode::InstalledView => render_installed_view(f, app, size),
         }
     })?;
     Ok(())
@@ -295,14 +328,29 @@ fn render_search_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
     if !app.status_message.is_empty() {
         let spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
         let frame = spinner_frames[(app.tick as usize) % spinner_frames.len()];
-        let spinner_area = Rect::new(chunks[1].x + chunks[1].width - 20, chunks[1].y + 1, 18, 1);
-        f.render_widget(
-            Paragraph::new(Span::styled(
-                format!("{} {}", frame, app.status_message),
-                Style::default().fg(theme::hot_pink()),
-            )),
-            spinner_area,
-        );
+        let input_display_width: usize = app
+            .search_input
+            .chars()
+            .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(1))
+            .sum();
+        let spinner_text_width = 2 + 1 + app.status_message.chars().take(30).count();
+        let available = chunks[1].width.saturating_sub(2) as usize;
+        let text_w = input_display_width.min(available);
+        let spinner_x = chunks[1].x + text_w as u16 + 1;
+        if spinner_x + spinner_text_width as u16 <= chunks[1].x + chunks[1].width - 1 {
+            let spinner_area = Rect::new(spinner_x, chunks[1].y + 1, spinner_text_width as u16, 1);
+            f.render_widget(
+                Paragraph::new(Span::styled(
+                    format!(
+                        "{} {}",
+                        frame,
+                        app.status_message.chars().take(30).collect::<String>()
+                    ),
+                    Style::default().fg(theme::hot_pink()),
+                )),
+                spinner_area,
+            );
+        }
     }
 
     // ── Package table via GridTable (writes Unicode grid lines directly to Buffer) ──
@@ -318,8 +366,8 @@ fn render_search_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
     let grid_rows: Vec<grid_table::GridRow> = items
         .iter()
         .map(|(global_idx, pkg)| {
-            let installed_marker = if pkg.installed { " ✓" } else { "" };
-            let name_raw = format!("{}{}", pkg.name, installed_marker);
+            let installed_badge = if pkg.installed { "✓ " } else { "  " };
+            let name_raw = format!("{}{}", installed_badge, pkg.name);
             let ver = if pkg.version.is_empty() {
                 "—".to_string()
             } else {
@@ -337,7 +385,7 @@ fn render_search_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
                     grid_table::GridCell {
                         text: name_raw,
                         style: if pkg.installed {
-                            theme::success()
+                            theme::installed_pkg()
                         } else {
                             theme::pkg_name()
                         },
@@ -421,7 +469,7 @@ fn render_search_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
     let help = match app.mode {
         Mode::Input => " ↩ search • tab results • esc quit",
         Mode::Browse => {
-            " ↑↓ navigate • ←→ source/page • tab filter • i install • d remove • / search • q quit"
+            " ↑↓ navigate • ←→ source/page • tab filter • i install • d remove • v installed • / search • q quit"
         }
         _ => " q quit",
     };
@@ -434,8 +482,8 @@ fn render_search_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
 }
 
 fn render_confirm_overlay(f: &mut ratatui::Frame, app: &App, area: Rect) {
-    let w = 55.min(area.width - 4);
-    let h = 8.min(area.height - 2);
+    let w = 55.min(area.width.saturating_sub(4));
+    let h = 8.min(area.height.saturating_sub(2));
     let x = (area.width - w) / 2;
     let y = (area.height - h) / 2;
     let dialog = Rect::new(x, y, w, h);
@@ -507,15 +555,29 @@ fn render_progress_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
         ])
         .split(area);
 
-    // Title with braille spinner (color #63 matches bubbletea-rs package-manager example)
+    // Title with braille spinner (theme-colored)
     let action_text = if app.confirm_action == "install" {
         "Installing"
     } else {
         "Removing"
     };
     let frame = SPINNER_FRAMES[(app.tick as usize) % SPINNER_FRAMES.len()];
-    let frame_style = LGStyle::new().foreground(LGColor::from("63"));
-    let spinner_str = frame_style.render(frame);
+    let spinner_str = format!(
+        "\x1b[38;2;{};{};{}m{}\x1b[0m",
+        match theme::vivid_purple() {
+            Color::Rgb(r, _, _) => r,
+            _ => 138,
+        },
+        match theme::vivid_purple() {
+            Color::Rgb(_, g, _) => g,
+            _ => 43,
+        },
+        match theme::vivid_purple() {
+            Color::Rgb(_, _, b) => b,
+            _ => 226,
+        },
+        frame
+    );
     let title = Paragraph::new(Text::raw(format!(
         "  {} {} packages...",
         spinner_str, action_text
@@ -529,23 +591,42 @@ fn render_progress_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, item)| {
+            let vp = theme::vivid_purple();
+            let _vp_r = match vp {
+                Color::Rgb(r, _, _) => r,
+                _ => 138,
+            };
+            let _vp_g = match vp {
+                Color::Rgb(_, g, _) => g,
+                _ => 43,
+            };
+            let _vp_b = match vp {
+                Color::Rgb(_, _, b) => b,
+                _ => 226,
+            };
+
             let (icon, icon_style) = if item.done {
                 if item.success {
-                    ("  ✓ ", Style::default().fg(Color::Rgb(0, 255, 0))) // 42 green
+                    let ng = theme::neon_green();
+                    let style = Style::default().fg(ng);
+                    ("  ✓ ", style)
                 } else {
-                    ("  ✗ ", Style::default().fg(Color::Rgb(255, 0, 0))) // 196 red
+                    let br = theme::THEME.read().unwrap().bright_red;
+                    let style = Style::default().fg(br);
+                    ("  ✗ ", style)
                 }
             } else {
                 let spin = SPINNER_FRAMES[(app.tick as usize + i * 3) % SPINNER_FRAMES.len()];
-                (spin, Style::default().fg(theme::vivid_purple())) // 63 purple
+                let style = Style::default().fg(vp);
+                (spin, style)
             };
 
             let name_style = if item.done {
-                Style::default().fg(Color::Rgb(100, 100, 100)) // 240 gray
+                theme::dim()
             } else {
                 Style::default()
-                    .fg(Color::Rgb(255, 100, 200))
-                    .add_modifier(ratatui::style::Modifier::BOLD) // 212 pink
+                    .fg(theme::hot_pink())
+                    .add_modifier(ratatui::style::Modifier::BOLD)
             };
 
             let line = Line::from(vec![
@@ -571,21 +652,51 @@ fn render_progress_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
     );
     f.render_widget(list, chunks[1]);
 
-    // Animated gradient progress bar from bubbletea-rs
+    // Animated gradient progress bar using ratatui-native colored Spans
     let done_count = app.progress_items.iter().filter(|i| i.done).count();
     let total = app.progress_items.len().max(1);
     let ratio = done_count as f64 / total as f64;
     let bar_width = (chunks[2].width as usize).saturating_sub(4).min(80);
     let filled = (bar_width as f64 * ratio).round() as usize;
     let empty = bar_width.saturating_sub(filled);
-    let gradient_bar = format!(
-        "{}{}",
-        gradient_filled_segment(filled, '█'),
-        "░".repeat(empty)
-    );
-    let progress_text = format!("  {}  {}/{}", gradient_bar, done_count, total);
+
+    // Build gradient bar as a Line of colored Spans
+    let gradient_colors = theme::gradient_stops();
+    let color_count = gradient_colors.len();
+    let phase = (app.tick as usize) % (color_count * 4);
+
+    let mut spans: Vec<Span> = Vec::with_capacity(filled + empty + 4);
+    spans.push(Span::raw("  "));
+
+    for i in 0..filled {
+        let color_idx = (phase + i * color_count / filled.max(1)) % color_count;
+        let next_idx = (color_idx + 1) % color_count;
+        let blend = ((i * color_count) % filled.max(1)) as f64 / filled.max(1) as f64;
+        let c1 = gradient_colors[color_idx];
+        let c2 = gradient_colors[next_idx];
+        let color = match (c1, c2) {
+            (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
+                let b = blend.min(1.0);
+                Color::Rgb(
+                    (r1 as f64 * (1.0 - b) + r2 as f64 * b) as u8,
+                    (g1 as f64 * (1.0 - b) + g2 as f64 * b) as u8,
+                    (b1 as f64 * (1.0 - b) + b2 as f64 * b) as u8,
+                )
+            }
+            _ => c1,
+        };
+        spans.push(Span::styled("█", Style::default().fg(color)));
+    }
+
+    spans.push(Span::styled(
+        "░".repeat(empty),
+        Style::default().fg(theme::THEME.read().unwrap().surface),
+    ));
+    spans.push(Span::raw(format!("  {}/{}", done_count, total)));
+
+    let progress_line = Line::from(spans);
     f.render_widget(
-        Paragraph::new(Text::raw(progress_text)).block(
+        Paragraph::new(progress_line).block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(theme::border())
@@ -599,7 +710,7 @@ fn render_progress_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
 fn render_done_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
     render_progress_view(f, app, area);
     // Overlay done message in a lipgloss-style card
-    let msg_w = 50.min(area.width - 4);
+    let msg_w = 50.min(area.width.saturating_sub(4));
     let x = (area.width - msg_w) / 2;
     let y = area.height / 2;
     let msg_area = Rect::new(x, y, msg_w, 5);
@@ -632,6 +743,191 @@ fn render_done_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(text).block(block), msg_area);
 }
 
+fn render_installed_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // title bar
+            Constraint::Length(3), // search input
+            Constraint::Min(5),    // results table
+            Constraint::Length(1), // paginator
+            Constraint::Length(1), // status bar
+        ])
+        .split(area);
+
+    // Title bar
+    f.render_widget(
+        Block::default()
+            .borders(Borders::NONE)
+            .title(Span::styled(
+                format!(" 📦 {} installed packages ", app.installed_results.len()),
+                theme::title(),
+            ))
+            .style(Style::default().bg(theme::bg_color())),
+        chunks[0],
+    );
+
+    // Search input
+    let input_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(if app.mode == Mode::InstalledView {
+            Style::default().fg(theme::hot_pink())
+        } else {
+            theme::border()
+        })
+        .title(Span::styled(" 🔍 Filter installed ", theme::search_label()))
+        .style(Style::default().bg(theme::bg_color()));
+
+    let input_text = if app.search_input.is_empty() {
+        Paragraph::new(Span::styled(
+            "Type to filter installed packages...",
+            theme::dim(),
+        ))
+    } else {
+        let mut display = app.search_input.clone();
+        let cursor_char = if app.tick % 6 < 3 { '│' } else { '▏' };
+        display.insert(app.cursor_pos, cursor_char);
+        Paragraph::new(Span::styled(display, theme::input()))
+    };
+    f.render_widget(input_text.block(input_block), chunks[1]);
+
+    // Filtered results
+    let filter = app.search_input.to_lowercase();
+    let filtered: Vec<&PackageInfo> = app
+        .installed_results
+        .iter()
+        .filter(|p| {
+            filter.is_empty()
+                || p.name.to_lowercase().contains(&filter)
+                || p.source.to_lowercase().contains(&filter)
+                || p.version.to_lowercase().contains(&filter)
+        })
+        .collect();
+
+    app.page_size = (chunks[2].height as usize).saturating_sub(4).max(1);
+    let total = filtered.len();
+    let pages = if total == 0 {
+        1
+    } else {
+        total.div_ceil(app.page_size)
+    };
+    let page = app.page.min(pages.saturating_sub(1));
+    let start = page * app.page_size;
+    let page_items: Vec<&PackageInfo> = filtered
+        .iter()
+        .skip(start)
+        .take(app.page_size)
+        .copied()
+        .collect();
+
+    let desc_col_max = (chunks[2].width as usize)
+        .saturating_sub(5 + 26 + 14 + 12 + 6)
+        .max(10);
+
+    let grid_rows: Vec<grid_table::GridRow> = page_items
+        .iter()
+        .enumerate()
+        .map(|(rel_idx, pkg)| {
+            let global_idx = start + rel_idx;
+            let installed_badge = "✓ ";
+            let name_raw = format!("{}{}", installed_badge, pkg.name);
+            let ver = if pkg.version.is_empty() {
+                "—".to_string()
+            } else {
+                pkg.version.chars().take(12).collect()
+            };
+            let src: String = pkg.source.chars().take(10).collect();
+            let desc: String = pkg.description.chars().take(desc_col_max).collect();
+            let is_selected = app.list_state.selected() == Some(rel_idx);
+
+            grid_table::GridRow {
+                cells: vec![
+                    grid_table::GridCell {
+                        text: format!("{}", global_idx + 1),
+                        style: theme::number(),
+                    },
+                    grid_table::GridCell {
+                        text: name_raw,
+                        style: if is_selected {
+                            theme::highlight()
+                        } else {
+                            theme::installed_pkg()
+                        },
+                    },
+                    grid_table::GridCell {
+                        text: ver,
+                        style: theme::version(),
+                    },
+                    grid_table::GridCell {
+                        text: src,
+                        style: theme::source_tag(),
+                    },
+                    grid_table::GridCell {
+                        text: desc,
+                        style: theme::desc(),
+                    },
+                ],
+            }
+        })
+        .collect();
+
+    let columns = [
+        grid_table::Column {
+            header: "#",
+            width: Constraint::Length(5),
+        },
+        grid_table::Column {
+            header: "Name",
+            width: Constraint::Percentage(25),
+        },
+        grid_table::Column {
+            header: "Version",
+            width: Constraint::Length(14),
+        },
+        grid_table::Column {
+            header: "Source",
+            width: Constraint::Length(12),
+        },
+        grid_table::Column {
+            header: "Description",
+            width: Constraint::Min(10),
+        },
+    ];
+
+    f.render_widget(
+        grid_table::GridTable {
+            columns: &columns,
+            rows: &grid_rows,
+            selected: app.list_state.selected(),
+            header_style: theme::grid_header(),
+            separator_style: theme::grid_separator(),
+            selected_style: theme::highlight(),
+        },
+        chunks[2],
+    );
+
+    // Paginator
+    f.render_widget(
+        paginator::Paginator {
+            current_page: page,
+            total_pages: pages,
+            tick: app.tick,
+        },
+        chunks[3],
+    );
+
+    // Status bar
+    let status_line = Line::from(vec![
+        Span::styled(" INSTALLED ", theme::status_bar()),
+        Span::styled(" ", Style::default()),
+        Span::styled(
+            " ↑↓ navigate • i install • d remove • / filter • Ctrl+F fuzzy • q back",
+            theme::status_text(),
+        ),
+    ]);
+    f.render_widget(Paragraph::new(status_line), chunks[4]);
+}
+
 // ── Event handling ──────────────────────────────────────────────────────────
 
 fn handle_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
@@ -646,14 +942,17 @@ fn handle_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Option<Ac
             None
         }
         Mode::Progress => None,
+        Mode::InstalledView => handle_installed_key(app, key, modifiers),
     }
 }
 
 enum Action {
     Search(String),
     Install(Vec<String>, String), // packages, source
-    Remove(Vec<String>),
+    Remove(Vec<String>, String),  // packages, source
     FuzzySearch,
+    FuzzySearchInstalled,
+    LoadInstalled,
 }
 
 fn handle_input_key(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) -> Option<Action> {
@@ -696,6 +995,21 @@ fn handle_input_key(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) -> Op
                     app.list_state.select(Some(0));
                     app.update_source_options();
                 }
+            }
+        }
+        KeyCode::Char('v') => {
+            if !app.installed_loaded {
+                return Some(Action::LoadInstalled);
+            } else {
+                app.mode = Mode::InstalledView;
+                app.page = 0;
+                app.list_state.select(if app.installed_results.is_empty() {
+                    None
+                } else {
+                    Some(0)
+                });
+                app.search_input.clear();
+                app.cursor_pos = 0;
             }
         }
         KeyCode::Esc => app.should_quit = true,
@@ -782,7 +1096,11 @@ fn handle_browse_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Op
         }
         KeyCode::Char('i') | KeyCode::Enter => {
             if let Some(pkg) = app.selected_package() {
-                let _source = if app.source_options.len() > 1 {
+                if pkg.installed {
+                    app.status_message = format!("{} is already installed", pkg.name);
+                    return None;
+                }
+                let source = if app.source_options.len() > 1 {
                     app.source_options
                         .get(app.source_selected)
                         .cloned()
@@ -793,6 +1111,7 @@ fn handle_browse_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Op
                 let pkg_name = pkg.name.clone();
                 app.confirm_action = "install".to_string();
                 app.confirm_packages = vec![pkg_name];
+                app.confirm_source = source;
                 app.confirm_selected_yes = true;
                 app.mode = Mode::Confirm;
                 return None;
@@ -800,15 +1119,39 @@ fn handle_browse_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Op
         }
         KeyCode::Char('d') | KeyCode::Char('r') => {
             if let Some(pkg) = app.selected_package() {
+                let source = if app.source_options.len() > 1 {
+                    app.source_options
+                        .get(app.source_selected)
+                        .cloned()
+                        .unwrap_or_default()
+                } else {
+                    pkg.source.clone()
+                };
                 let pkg_name = pkg.name.clone();
                 app.confirm_action = "remove".to_string();
                 app.confirm_packages = vec![pkg_name];
+                app.confirm_source = source;
                 app.confirm_selected_yes = true;
                 app.mode = Mode::Confirm;
             }
         }
         KeyCode::Char('/') => {
             app.mode = Mode::Input;
+        }
+        KeyCode::Char('v') => {
+            if !app.installed_loaded {
+                return Some(Action::LoadInstalled);
+            } else {
+                app.mode = Mode::InstalledView;
+                app.page = 0;
+                app.list_state.select(if app.installed_results.is_empty() {
+                    None
+                } else {
+                    Some(0)
+                });
+                app.search_input.clear();
+                app.cursor_pos = 0;
+            }
         }
         KeyCode::Char('q') | KeyCode::Esc => {
             app.should_quit = true;
@@ -822,6 +1165,7 @@ fn handle_confirm_key(app: &mut App, key: KeyCode) -> Option<Action> {
     let confirm_yes = || {
         let pkgs = app.confirm_packages.clone();
         let action = app.confirm_action.clone();
+        let source = app.confirm_source.clone();
 
         let new_app_mode = Mode::Progress;
         let progress_items = pkgs
@@ -834,19 +1178,9 @@ fn handle_confirm_key(app: &mut App, key: KeyCode) -> Option<Action> {
             .collect();
 
         if action == "install" {
-            let source = if app.source_options.len() > 1 {
-                app.source_options
-                    .get(app.source_selected)
-                    .cloned()
-                    .unwrap_or_default()
-            } else if let Some(pkg) = app.all_results.iter().find(|p| p.name == pkgs[0]) {
-                pkg.source.clone()
-            } else {
-                String::new()
-            };
             Some((new_app_mode, progress_items, Action::Install(pkgs, source)))
         } else {
-            Some((new_app_mode, progress_items, Action::Remove(pkgs)))
+            Some((new_app_mode, progress_items, Action::Remove(pkgs, source)))
         }
     };
 
@@ -888,6 +1222,108 @@ fn handle_confirm_key(app: &mut App, key: KeyCode) -> Option<Action> {
         }
         _ => None,
     }
+}
+
+fn handle_installed_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
+    if modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('f') {
+        return Some(Action::FuzzySearchInstalled);
+    }
+    let _total = app.installed_results.len();
+    let filter = app.search_input.to_lowercase();
+    let filtered_count = app
+        .installed_results
+        .iter()
+        .filter(|p| {
+            filter.is_empty()
+                || p.name.to_lowercase().contains(&filter)
+                || p.source.to_lowercase().contains(&filter)
+        })
+        .count();
+    let pages = if filtered_count == 0 {
+        1
+    } else {
+        filtered_count.div_ceil(app.page_size)
+    };
+
+    match key {
+        KeyCode::Up => {
+            if let Some(sel) = app.list_state.selected() {
+                if sel > 0 {
+                    app.list_state.select(Some(sel - 1));
+                } else if app.page > 0 {
+                    app.page -= 1;
+                    let new_page_items =
+                        app.page_size.min(filtered_count - app.page * app.page_size);
+                    app.list_state
+                        .select(Some(new_page_items.saturating_sub(1)));
+                }
+            }
+        }
+        KeyCode::Down => {
+            if let Some(sel) = app.list_state.selected() {
+                if sel + 1 < app.page_size
+                    && sel + 1 < filtered_count.saturating_sub(app.page * app.page_size)
+                {
+                    app.list_state.select(Some(sel + 1));
+                } else if app.page + 1 < pages {
+                    app.page += 1;
+                    app.list_state.select(Some(0));
+                }
+            }
+        }
+        KeyCode::Char('i') | KeyCode::Enter => {
+            // Install from installed list - find selected package
+            let filter = app.search_input.to_lowercase();
+            let filtered: Vec<&PackageInfo> = app
+                .installed_results
+                .iter()
+                .filter(|p| {
+                    filter.is_empty()
+                        || p.name.to_lowercase().contains(&filter)
+                        || p.source.to_lowercase().contains(&filter)
+                })
+                .collect();
+            if let Some(sel) = app.list_state.selected() {
+                let global_idx = app.page * app.page_size + sel;
+                if let Some(pkg) = filtered.get(global_idx) {
+                    // Check if already installed (it is, since this is the installed view)
+                    // Show a popup informing the user
+                    app.status_message = format!("{} is already installed", pkg.name);
+                }
+            }
+        }
+        KeyCode::Char('d') | KeyCode::Char('r') => {
+            // Remove from installed list
+            let filter = app.search_input.to_lowercase();
+            let filtered: Vec<&PackageInfo> = app
+                .installed_results
+                .iter()
+                .filter(|p| {
+                    filter.is_empty()
+                        || p.name.to_lowercase().contains(&filter)
+                        || p.source.to_lowercase().contains(&filter)
+                })
+                .collect();
+            if let Some(sel) = app.list_state.selected() {
+                let global_idx = app.page * app.page_size + sel;
+                if let Some(pkg) = filtered.get(global_idx) {
+                    app.confirm_action = "remove".to_string();
+                    app.confirm_packages = vec![pkg.name.clone()];
+                    app.confirm_source = pkg.source.clone();
+                    app.confirm_selected_yes = true;
+                    app.mode = Mode::Confirm;
+                }
+            }
+        }
+        KeyCode::Char('/') => {
+            app.mode = Mode::Input;
+        }
+        KeyCode::Char('q') | KeyCode::Esc => {
+            app.mode = Mode::Browse;
+        }
+        _ => {}
+    }
+    None
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -983,9 +1419,13 @@ pub async fn run_search_tui_inner(
                             }
                             app.mode = Mode::Done;
                         }
-                        Action::Remove(pkgs) => {
+                        Action::Remove(pkgs, source) => {
                             render(terminal, &mut app)?;
-                            if let Some(pm) = managers.first() {
+                            let pm = managers
+                                .iter()
+                                .find(|m| m.name() == source)
+                                .or_else(|| managers.first());
+                            if let Some(pm) = pm {
                                 for (i, pkg) in pkgs.iter().enumerate() {
                                     let result = pm.remove(&[pkg.clone()]).await;
                                     if let Some(item) = app.progress_items.get_mut(i) {
@@ -1090,6 +1530,117 @@ pub async fn run_search_tui_inner(
                                             .to_string();
                                 }
                             }
+                        }
+                        Action::FuzzySearchInstalled => {
+                            if app.installed_results.is_empty() {
+                                continue;
+                            }
+                            // Suspend TUI
+                            terminal::disable_raw_mode()?;
+                            execute!(terminal.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
+
+                            use std::io::Write;
+                            use std::process::{Command, Stdio};
+
+                            let child_res = Command::new("sk")
+                                .arg("--ansi")
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .spawn();
+
+                            match child_res {
+                                Ok(mut child) => {
+                                    let mut items_text = String::new();
+                                    for pkg in &app.installed_results {
+                                        items_text.push_str(&format!(
+                                            "{} [{}] {}\n",
+                                            pkg.name, pkg.source, pkg.version
+                                        ));
+                                    }
+
+                                    if let Some(mut stdin) = child.stdin.take() {
+                                        let _ = stdin.write_all(items_text.as_bytes());
+                                    }
+
+                                    let output = child.wait_with_output().unwrap_or_else(|_| {
+                                        std::process::Output {
+                                            status: std::os::unix::process::ExitStatusExt::from_raw(
+                                                1,
+                                            ),
+                                            stdout: Vec::new(),
+                                            stderr: Vec::new(),
+                                        }
+                                    });
+
+                                    // Restore TUI
+                                    terminal::enable_raw_mode()?;
+                                    execute!(
+                                        terminal.backend_mut(),
+                                        EnterAlternateScreen,
+                                        cursor::Hide
+                                    )?;
+                                    terminal.clear()?;
+
+                                    if output.status.success() {
+                                        let selected = String::from_utf8_lossy(&output.stdout);
+                                        let selected_line = selected.trim();
+                                        if !selected_line.is_empty() {
+                                            if let Some(idx) = selected_line.rfind(" [") {
+                                                let name = &selected_line[..idx];
+                                                let filtered: Vec<&PackageInfo> = app
+                                                    .installed_results
+                                                    .iter()
+                                                    .filter(|p| p.name == name)
+                                                    .collect();
+                                                if !filtered.is_empty() {
+                                                    app.search_input = name.to_string();
+                                                    app.cursor_pos = name.len();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    terminal::enable_raw_mode()?;
+                                    execute!(
+                                        terminal.backend_mut(),
+                                        EnterAlternateScreen,
+                                        cursor::Hide
+                                    )?;
+                                    terminal.clear()?;
+                                    app.status_message =
+                                        "Error: Skim (sk) fuzzy finder is not installed."
+                                            .to_string();
+                                }
+                            }
+                        }
+                        Action::LoadInstalled => {
+                            app.status_message = "Loading installed packages...".to_string();
+                            render(terminal, &mut app)?;
+                            let mut all_installed: Vec<PackageInfo> = Vec::new();
+                            for pm in managers {
+                                if !pm.is_available() {
+                                    continue;
+                                }
+                                if let Ok(pkgs) = pm.list_installed().await {
+                                    all_installed.extend(pkgs);
+                                }
+                            }
+                            all_installed
+                                .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+                            app.installed_results = all_installed;
+                            app.installed_loaded = true;
+                            app.mark_installed();
+                            app.mode = Mode::InstalledView;
+                            app.page = 0;
+                            app.list_state.select(if app.installed_results.is_empty() {
+                                None
+                            } else {
+                                Some(0)
+                            });
+                            app.search_input.clear();
+                            app.cursor_pos = 0;
+                            app.status_message.clear();
                         }
                     }
                 }

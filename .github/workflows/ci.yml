@@ -7,15 +7,18 @@ on:
     branches: [ "main" ]
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   CARGO_TERM_COLOR: always
 
 jobs:
   build_and_test:
+    name: Build & Test
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
     - name: Cache dependencies
       uses: actions/cache@v4
       with:
@@ -26,18 +29,79 @@ jobs:
           ~/.cargo/git/db/
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
     - name: Build
       run: cargo build --verbose
-      
+
     - name: Run tests
       run: cargo test --verbose
-      
+
   lint:
+    name: Lint & Format
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-lint-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-lint-
+
     - name: Run clippy
-      run: cargo clippy
+      run: cargo clippy -- -D warnings
+
     - name: Check format
       run: cargo fmt -- --check
+
+  deb_package:
+    name: Build .deb Package
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-deb
+      run: cargo install cargo-deb
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-deb-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-deb-
+
+    - name: Build release binary
+      run: cargo build --release
+
+    - name: Build .deb package
+      run: cargo deb --no-build --no-strip
+
+    - name: Upload .deb artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: s8n-deb-package
+        path: target/debian/*.deb
+        retention-days: 30

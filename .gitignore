@@ -1,2 +1,21 @@
 /target
 **/*.rs.bk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Rust artifacts
+*.profraw
+*.profdata
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Config backups
+*.toml.bak

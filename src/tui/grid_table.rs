@@ -230,20 +230,31 @@ fn compute_widths(columns: &[Column], total_width: u16) -> Vec<u16> {
 
     let mut widths = Vec::with_capacity(columns.len());
     let mut used = 0u16;
-    let mut min_cols: Vec<(usize, u16)> = Vec::new(); // (idx, fixed_width)
 
     // First pass: allocate fixed widths
-    for (i, col) in columns.iter().enumerate() {
+    for col in columns.iter() {
         match col.width {
             Constraint::Length(n) => {
                 widths.push(n);
                 used += n;
-                min_cols.push((i, n));
             }
             _ => {
                 widths.push(0); // placeholder
             }
         }
+    }
+
+    // If fixed columns already exceed available space, scale them down proportionally
+    if used > available && available > 0 {
+        let scale = available as f64 / used as f64;
+        let mut scaled_used = 0u16;
+        for (i, col) in columns.iter().enumerate() {
+            if matches!(col.width, Constraint::Length(_)) {
+                widths[i] = (widths[i] as f64 * scale).max(1.0) as u16;
+                scaled_used += widths[i];
+            }
+        }
+        used = scaled_used;
     }
 
     // Second pass: distribute remaining to Percentage and Min
