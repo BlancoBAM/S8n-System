@@ -1,6 +1,5 @@
 # S8n System Manager
 
-> **Katie** — Built specifically for **Lilith Linux**
 
 [![CI](https://github.com/BlancoBAM/S8n-System/actions/workflows/ci.yml/badge.svg)](https://github.com/BlancoBAM/S8n-System/actions/workflows/ci.yml)
 [![Release](https://github.com/BlancoBAM/S8n-System/actions/workflows/release.yml/badge.svg)](https://github.com/BlancoBAM/S8n-System/actions/workflows/release.yml)
@@ -314,4 +313,7 @@ Special thanks to the following Rust libraries and their authors:
 
 This software is released under the [GNU General Public License v3.0](LICENSE).
 
-**Built specifically for Lilith Linux and Katie.**
+**Built specifically for Lilith Linux and Katie (aka S8n)**
+
+
+
