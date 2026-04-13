@@ -229,8 +229,7 @@ S8n automatically detects which package managers are available on your system:
 | **pip** | `pip` | ✓ | ✓ | ✓ | ✓ |
 | **pacstall** | `pacstall` | ✓ | ✓ | ✓ | ✓ |
 | **soar** | `soar` | ✓ | ✓ | ✓ | ✓ |
-| **bun** | `bun` | — | ✓ | ✓ | ✓ |
-| **topgrade** | `topgrade` | — | — | — | — |
+
 
 ---
 
