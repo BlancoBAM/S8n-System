@@ -82,6 +82,13 @@ sudo dpkg -i s8n_*.deb
 cargo install s8n
 ```
 
+> **Note:** `cargo install` places the binary in `~/.cargo/bin/s8n` — **not** in your current directory.
+> Ensure `~/.cargo/bin` is in your PATH:
+> ```bash
+> echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+> ```
+> Then run `s8n` directly.
+
 ### From Source
 
 ```bash
