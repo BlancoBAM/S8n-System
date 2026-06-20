@@ -337,7 +337,7 @@ fn render_search_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
         let available = chunks[1].width.saturating_sub(2) as usize;
         let text_w = input_display_width.min(available);
         let spinner_x = chunks[1].x + text_w as u16 + 1;
-        if spinner_x + spinner_text_width as u16 < chunks[1].x + chunks[1].width {
+        if spinner_x + (spinner_text_width as u16) < chunks[1].x + chunks[1].width {
             let spinner_area = Rect::new(spinner_x, chunks[1].y + 1, spinner_text_width as u16, 1);
             f.render_widget(
                 Paragraph::new(Span::styled(
