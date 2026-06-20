@@ -1626,8 +1626,7 @@ pub async fn run_search_tui_inner(
                                     all_installed.extend(pkgs);
                                 }
                             }
-                            all_installed
-                                .sort_by_key(|a| a.name.to_lowercase());
+                            all_installed.sort_by_key(|a| a.name.to_lowercase());
                             app.installed_results = all_installed;
                             app.installed_loaded = true;
                             app.mark_installed();
