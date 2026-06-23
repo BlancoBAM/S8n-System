@@ -1797,12 +1797,28 @@ pub async fn run_progress_tui(
     render(&mut terminal, &mut app)?;
 
     for (i, pkg) in items.iter().enumerate() {
+        // Suspend the TUI alternate screen so the package manager can write
+        // directly to the terminal — this is essential for sudo password prompts,
+        // apt/snap progress bars, and any interactive output.
+        terminal::disable_raw_mode()?;
+        execute!(terminal.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
+
         let result = match action {
             "install" => pm.install(std::slice::from_ref(pkg)).await,
             "remove" => pm.remove(std::slice::from_ref(pkg)).await,
             "update" => pm.update().await,
             _ => PmResult::Error("Unknown action".into()),
         };
+
+        // Resume the TUI alternate screen to show the updated result
+        terminal::enable_raw_mode()?;
+        execute!(
+            terminal.backend_mut(),
+            EnterAlternateScreen,
+            cursor::Hide
+        )?;
+        terminal.clear()?;
+
         if let Some(item) = app.progress_items.get_mut(i) {
             item.done = true;
             item.success = matches!(result, PmResult::Success);

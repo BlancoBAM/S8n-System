@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-release:
-    name: Build Release Binary
+    name: Build Release Binary (musl static)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -15,27 +15,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust toolchain with musl target
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
 
-      - name: Cache dependencies
+      - name: Install musl tools
+        run: sudo apt-get install -y musl-tools
+
+      - name: Cache registry/git only (not target/)
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-musl-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-release-
+            ${{ runner.os }}-cargo-musl-
 
-      - name: Build Release
-        run: cargo build --release
+      - name: Build Release (static musl binary — no glibc dependency)
+        run: cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Rename Output
-        run: mv target/release/s8n s8n-linux-amd64
+        run: mv target/x86_64-unknown-linux-musl/release/s8n s8n-linux-amd64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -48,7 +51,10 @@ jobs:
 
   build-deb:
     name: Build .deb Package
-    runs-on: ubuntu-latest
+    # ubuntu-22.04 ships glibc 2.35, making the .deb compatible with
+    # Ubuntu 22.04+, Debian 12+, and most modern distros.
+    # ubuntu-latest (24.04) produces glibc 2.39 which is too new for most users.
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
 
@@ -61,24 +67,22 @@ jobs:
       - name: Install cargo-deb
         run: cargo install cargo-deb
 
-      - name: Cache dependencies
+      - name: Cache registry/git only (not target/ — avoids stale binary)
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-deb-release-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-22-deb-registry-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-deb-release-
+            ubuntu-22-deb-registry-
 
       - name: Build Release
         run: cargo build --release
 
       - name: Build .deb Package
-        run: cargo deb --no-build --no-strip
+        run: cargo deb --no-build
 
       - name: Upload .deb to Release
         uses: softprops/action-gh-release@v2
@@ -101,15 +105,13 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache dependencies
+      - name: Cache registry/git only
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
           key: ${{ runner.os }}-publish-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-publish-

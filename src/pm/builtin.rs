@@ -1,5 +1,5 @@
 use super::{
-    run_command_captured, run_command_interactive, run_command_quiet, PackageInfo, PackageManager,
+    run_command_captured, run_command_interactive, PackageInfo, PackageManager,
     PmResult,
 };
 use async_trait::async_trait;
@@ -15,6 +15,8 @@ pub struct GenericWrapper {
     pub remove_cmd: Vec<String>,
     pub update_cmd: Vec<String>,
     pub list_cmd: Vec<String>,
+    /// If true, install/remove/update commands are wrapped with `sudo`
+    pub needs_sudo: bool,
 }
 
 #[async_trait]
@@ -50,33 +52,51 @@ impl PackageManager for GenericWrapper {
     }
 
     async fn install(&self, packages: &[String]) -> PmResult {
-        let mut cmd = Command::new(&self.binary);
+        let mut cmd = if self.needs_sudo {
+            let mut c = Command::new("sudo");
+            c.arg(&self.binary);
+            c
+        } else {
+            Command::new(&self.binary)
+        };
         for arg in &self.install_cmd {
             cmd.arg(arg);
         }
         for pkg in packages {
             cmd.arg(pkg);
         }
-        run_command_quiet(&mut cmd).await
+        run_command_interactive(&mut cmd).await
     }
 
     async fn remove(&self, packages: &[String]) -> PmResult {
-        let mut cmd = Command::new(&self.binary);
+        let mut cmd = if self.needs_sudo {
+            let mut c = Command::new("sudo");
+            c.arg(&self.binary);
+            c
+        } else {
+            Command::new(&self.binary)
+        };
         for arg in &self.remove_cmd {
             cmd.arg(arg);
         }
         for pkg in packages {
             cmd.arg(pkg);
         }
-        run_command_quiet(&mut cmd).await
+        run_command_interactive(&mut cmd).await
     }
 
     async fn update(&self) -> PmResult {
-        let mut cmd = Command::new(&self.binary);
+        let mut cmd = if self.needs_sudo {
+            let mut c = Command::new("sudo");
+            c.arg(&self.binary);
+            c
+        } else {
+            Command::new(&self.binary)
+        };
         for arg in &self.update_cmd {
             cmd.arg(arg);
         }
-        run_command_quiet(&mut cmd).await
+        run_command_interactive(&mut cmd).await
     }
 
     async fn list_installed(&self) -> Result<Vec<PackageInfo>, String> {
@@ -586,6 +606,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["remove".into(), "-y".into()],
             update_cmd: vec!["upgrade".into(), "-y".into()],
             list_cmd: vec!["list".into(), "--installed".into()],
+            needs_sudo: true,
         }),
         Box::new(GenericWrapper {
             name: "pacstall".into(),
@@ -595,6 +616,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["-R".into()],
             update_cmd: vec!["-U".into(), "all".into()],
             list_cmd: vec!["-L".into()],
+            needs_sudo: false, // pacstall handles its own privilege escalation
         }),
         Box::new(GenericWrapper {
             name: "flatpak".into(),
@@ -604,6 +626,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["uninstall".into(), "-y".into()],
             update_cmd: vec!["update".into(), "-y".into()],
             list_cmd: vec!["list".into()],
+            needs_sudo: false, // flatpak user installs don't need sudo
         }),
         Box::new(GenericWrapper {
             name: "snap".into(),
@@ -613,6 +636,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["remove".into()],
             update_cmd: vec!["refresh".into()],
             list_cmd: vec!["list".into()],
+            needs_sudo: true,
         }),
         Box::new(GenericWrapper {
             name: "brew".into(),
@@ -622,6 +646,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["uninstall".into()],
             update_cmd: vec!["upgrade".into()],
             list_cmd: vec!["list".into()],
+            needs_sudo: false,
         }),
         Box::new(GenericWrapper {
             name: "soar".into(),
@@ -631,6 +656,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["remove".into()],
             update_cmd: vec!["update".into()],
             list_cmd: vec!["list".into(), "--installed".into()],
+            needs_sudo: false,
         }),
         Box::new(GenericWrapper {
             name: "npm".into(),
@@ -640,6 +666,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["uninstall".into(), "-g".into()],
             update_cmd: vec!["update".into(), "-g".into()],
             list_cmd: vec!["list".into(), "-g".into(), "--depth=0".into()],
+            needs_sudo: false,
         }),
         Box::new(GenericWrapper {
             name: "bun".into(),
@@ -649,6 +676,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["remove".into(), "-g".into()],
             update_cmd: vec!["update".into(), "-g".into()],
             list_cmd: vec!["pm".into(), "ls".into(), "-g".into()],
+            needs_sudo: false,
         }),
         Box::new(GenericWrapper {
             name: "pip".into(),
@@ -658,6 +686,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec!["uninstall".into(), "-y".into()],
             update_cmd: vec!["install".into(), "--upgrade".into()],
             list_cmd: vec!["list".into()],
+            needs_sudo: false,
         }),
         Box::new(GenericWrapper {
             name: "topgrade".into(),
@@ -667,6 +696,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec![],
             update_cmd: vec!["--yes".into()],
             list_cmd: vec![],
+            needs_sudo: false,
         }),
     ]
 }
