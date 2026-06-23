@@ -1,6 +1,6 @@
 [package]
 name = "s8n"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "A beautiful unified system manager, package manager, and file manager TUI — built for Lilith Linux and Katie"
 authors = ["BlancoBAM", "Lilith"]

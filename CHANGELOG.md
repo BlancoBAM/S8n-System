@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-06-23
+
+### Added
+- **README Screenshots** — Embedded screenshots of the Main Menu, Package Manager, File Manager, Installed Packages, and Theme Selector views directly into the README.md documentation.
+
+### Fixed
+- **Cast Ambiguity** — Parenthesized the cast expression (`spinner_text_width as u16`) to resolve parsing ambiguity with Rust's generic argument parser.
+- **Clippy lints** — Resolved `clippy::int-plus-one` and `clippy::unnecessary-sort-by` warnings.
+- **Documentation/UX** — Added a clear note in the README about where `cargo install` places binary packages and the need to configure `~/.cargo/bin` in the user's `PATH`.
+
 ## [0.2.0] - 2026-04-01
 
 ### Added

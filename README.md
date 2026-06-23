@@ -8,6 +8,8 @@
 
 S8n is a fast, visually stunning System Manager, Unified Package Manager, and File Manager built in Rust. It provides native terminal gradients, Miller-column file browsing, and cross-package-manager fuzzy search — all from a single, beautiful terminal interface. It is designed specifically for Lilith Linux and Katie.
 
+![S8n Showcase](screenshots/Screenshot_2026-04-01_23-16-30.png)
+
 ---
 
 ## Table of Contents
@@ -111,6 +113,8 @@ cp target/release/s8n ~/.local/bin/s8n
 
 Launch with `s8n` to see the main menu with three options:
 
+![S8n TUI Main Menu](screenshots/Screenshot_2026-04-01_23-16-02.png)
+
 | Option | Description |
 |--------|-------------|
 | **Package Manager** | Search, install, and manage packages across multiple sources |
@@ -120,6 +124,8 @@ Launch with `s8n` to see the main menu with three options:
 ### Package Manager
 
 The package manager is the core feature. Upon entering, you'll see a search prompt.
+
+![S8n Package Search & Browse](screenshots/Screenshot_2026-04-01_23-16-30.png)
 
 **Basic workflow:**
 
@@ -131,9 +137,13 @@ The package manager is the core feature. Upon entering, you'll see a search prom
 
 **Source tabs:** When a package is available from multiple sources, tabs appear at the top showing each source. Use `←/→` to switch between them.
 
+![S8n Search Pagination](screenshots/Screenshot_2026-04-01_23-18-33.png)
+
 ### Installed Packages
 
 Press `v` at any time in the package manager to view **all installed packages** system-wide:
+
+![S8n Installed Packages View](screenshots/Screenshot_2026-04-01_23-18-49.png)
 
 - Packages are collected from all available package managers
 - Sorted alphabetically for easy browsing
@@ -148,6 +158,8 @@ Installed packages in search results are marked with a **✓** indicator and dis
 
 The Miller-column file manager lets you browse directories safely:
 
+![S8n File Manager with Miller Columns](screenshots/Screenshot_2026-04-01_23-17-24.png)
+
 - **Navigate** — Use arrow keys or `j/k` to move through files
 - **Drill down** — Press `Enter` or `l` to enter a directory
 - **Go back** — Press `h` or `Backspace` to go up a level
@@ -159,6 +171,8 @@ The Miller-column file manager lets you browse directories safely:
 ### Theme Picker
 
 Access the theme picker from the main menu or by pressing `t` in the package manager:
+
+![S8n Color Theme Selector](screenshots/Screenshot_2026-04-01_23-17-56.png)
 
 - Use `↑/↓` or `j/k` to preview themes live
 - Press `Enter` to save the selected theme
