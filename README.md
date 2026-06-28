@@ -415,4 +415,4 @@ Special thanks to the following projects and their authors:
 
 This software is released under the [GNU General Public License v3.0](LICENSE).
 
-**Beauty meets power. Evil meets elegance.**
+**Lilith Linux. Beauty meets power. Evil meets elegance.**
