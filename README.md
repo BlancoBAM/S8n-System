@@ -333,7 +333,7 @@ Special thanks to the following Rust libraries and their authors:
 
 This software is released under the [GNU General Public License v3.0](LICENSE).
 
-**Built specifically for Lilith Linux and Katie (aka S8n)**
+**Built specifically for Lilith Linux. Beauty meets power. Evil meets elegance.**
 
 
 
