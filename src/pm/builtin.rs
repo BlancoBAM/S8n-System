@@ -7,33 +7,91 @@ use tokio::process::Command;
 use which::which;
 
 /// Strip ANSI escape codes and markdown formatting from package names/descriptions.
-/// Handles: \x1b[...m escape codes, **bold**, *italic*, _underline_, `code`
+/// Handles: \x1b[...m escape codes, **bold**, *italic*, `code`, [link](url),
+/// unicode ellipsis, UTF-8 replacement characters, npm column separator artifacts.
 fn clean_text(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
+    // 1. Strip ANSI escape sequences (\x1b[...m)
+    let mut ansi_stripped = String::with_capacity(s.len());
     let bytes = s.as_bytes();
     let mut i = 0;
-    // First pass: strip ANSI escape sequences
     while i < bytes.len() {
         if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
-            // Skip until we hit a letter (the SGR terminator)
             i += 2;
             while i < bytes.len() && !bytes[i].is_ascii_alphabetic() {
                 i += 1;
             }
-            i += 1; // skip the terminating letter
+            i += 1;
         } else {
-            out.push(bytes[i] as char);
+            ansi_stripped.push(bytes[i] as char);
             i += 1;
         }
     }
-    // Second pass: strip markdown inline formatting
-    let out = out.replace("**", "").replace('*', "").replace('`', "");
-    // Collapse multiple spaces / odd unicode spacing to a single space
-    let mut result = String::with_capacity(out.len());
+
+    // 2. Strip markdown links: [display text](url) → display text
+    let mut no_links = String::with_capacity(ansi_stripped.len());
+    let mut chars = ansi_stripped.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '[' {
+            // Collect display text up to ]
+            let mut display = String::new();
+            let mut found_close = false;
+            for c in chars.by_ref() {
+                if c == ']' {
+                    found_close = true;
+                    break;
+                }
+                display.push(c);
+            }
+            if found_close {
+                // Check for (url) immediately following
+                if chars.peek() == Some(&'(') {
+                    chars.next(); // consume '('
+                                  // Skip until ')'
+                    for c in chars.by_ref() {
+                        if c == ')' {
+                            break;
+                        }
+                    }
+                    no_links.push_str(&display);
+                } else {
+                    // Not a link, restore brackets
+                    no_links.push('[');
+                    no_links.push_str(&display);
+                    no_links.push(']');
+                }
+            } else {
+                no_links.push('[');
+                no_links.push_str(&display);
+            }
+        } else {
+            no_links.push(ch);
+        }
+    }
+
+    // 3. Strip remaining markdown inline formatting
+    let no_md = no_links.replace("**", "").replace('`', "");
+    // Strip lone * only when used as italic marker (surrounded by word chars or space)
+    // Simple approach: remove * that are not part of a word
+    let no_md: String = no_md.chars().filter(|&c| c != '*').collect();
+
+    // 4. Replace unicode ellipsis (U+2026) with plain "..."
+    let no_md = no_md.replace('\u{2026}', "...");
+
+    // 5. Remove UTF-8 replacement characters (U+FFFD) and the sequences that
+    //    display as ī¿½ (multi-byte replacement chars from latin1/cp1252 mishaps)
+    let no_md: String = no_md
+        .chars()
+        .filter(|&c| c != '\u{FFFD}' && c != '\u{012B}' && c != '\u{00BF}')
+        .collect();
+
+    // 6. Strip trailing npm column separator artifacts (lone '|' at end)
+    let no_md = no_md.trim_end_matches('|').trim();
+
+    // 7. Collapse multiple/unusual whitespace to a single space
+    let mut result = String::with_capacity(no_md.len());
     let mut prev_space = false;
-    for ch in out.chars() {
-        if ch == '\n' || ch == '\r' {
-            // Replace newlines with a space
+    for ch in no_md.chars() {
+        if ch == '\n' || ch == '\r' || ch == '\t' {
             if !prev_space {
                 result.push(' ');
                 prev_space = true;

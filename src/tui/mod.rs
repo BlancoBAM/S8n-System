@@ -2754,7 +2754,69 @@ pub async fn run_graveyard_tui(
     Ok(())
 }
 
-/// Search all available managers concurrently and collect results
+/// Score a package result against the search query.
+/// Higher score = better match. Results are sorted descending.
+fn relevance_score(pkg: &PackageInfo, query: &str) -> u32 {
+    let q = query.to_lowercase();
+    let name = pkg.name.to_lowercase();
+    let desc = pkg.description.to_lowercase();
+
+    // Exact name match
+    if name == q {
+        return 1000;
+    }
+    // Name starts with query
+    if name.starts_with(&q) {
+        return 800;
+    }
+    // Name contains query as a whole word (preceded/followed by `-`, `_`, `/`, or boundary)
+    let as_word = |haystack: &str, needle: &str| -> bool {
+        if let Some(pos) = haystack.find(needle) {
+            let before_ok = pos == 0
+                || haystack
+                    .as_bytes()
+                    .get(pos - 1)
+                    .map_or(true, |&b| matches!(b, b'-' | b'_' | b'/' | b'@'));
+            let after_pos = pos + needle.len();
+            let after_ok = after_pos >= haystack.len()
+                || haystack
+                    .as_bytes()
+                    .get(after_pos)
+                    .map_or(true, |&b| matches!(b, b'-' | b'_' | b'/' | b'@'));
+            before_ok && after_ok
+        } else {
+            false
+        }
+    };
+    if as_word(&name, &q) {
+        return 700;
+    }
+    // Name contains query anywhere
+    if name.contains(&q) {
+        // Favour shorter names (closer match)
+        let len_bonus = 50u32.saturating_sub(name.len() as u32);
+        return 600 + len_bonus;
+    }
+    // Description contains query
+    if desc.contains(&q) {
+        return 300;
+    }
+    // Query tokens individually present in name
+    let tokens: Vec<&str> = q
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if tokens.iter().all(|t| name.contains(t)) && !tokens.is_empty() {
+        return 200;
+    }
+    // Partial token match in name
+    let matched = tokens.iter().filter(|t| name.contains(*t)).count();
+    if matched > 0 {
+        return (100 + matched * 30) as u32;
+    }
+    0
+}
+
 /// Search all available managers concurrently and collect results
 async fn search_all(
     managers: &[Box<dyn PackageManager>],
@@ -2786,8 +2848,24 @@ async fn search_all(
         }
     }
 
-    // Convert hashmap back to vec and sort
-    let mut final_results: Vec<(String, Vec<PackageInfo>)> = results.into_iter().collect();
+    // Sort each PM's results by relevance to the query, then alphabetically
+    let primary_term = terms.first().copied().unwrap_or(query);
+    let mut final_results: Vec<(String, Vec<PackageInfo>)> = results
+        .into_iter()
+        .map(|(pm_name, mut pkgs)| {
+            // Deduplicate by name within the same PM
+            pkgs.dedup_by(|a, b| a.name == b.name);
+            // Sort: higher relevance score first; ties broken alphabetically
+            pkgs.sort_by(|a, b| {
+                let sa = relevance_score(a, primary_term);
+                let sb = relevance_score(b, primary_term);
+                sb.cmp(&sa).then_with(|| a.name.cmp(&b.name))
+            });
+            (pm_name, pkgs)
+        })
+        .collect();
+
+    // Sort PM groups alphabetically for stable tab order
     final_results.sort_by(|a, b| a.0.cmp(&b.0));
     final_results
 }
