@@ -11,9 +11,11 @@ pub mod file_manager;
 pub mod grid_table;
 pub mod menu;
 pub mod paginator;
+pub mod source_picker;
 pub mod tabs;
 pub mod theme;
 
+use crate::graveyard::{BuriedEntry, GraveyardConfig};
 use crate::pm::{PackageInfo, PackageManager, PmResult};
 use crossterm::{
     cursor,
@@ -50,12 +52,15 @@ pub enum AppMode {
 
 #[derive(Clone, PartialEq)]
 enum Mode {
-    Input,         // typing search query
-    Browse,        // navigating results with ↑↓
-    Confirm,       // install/remove confirmation
-    Progress,      // operation running
-    Done,          // finished, press q to exit
-    InstalledView, // viewing installed packages system-wide
+    Input,          // typing search query
+    Browse,         // navigating results with ↑↓
+    Confirm,        // install/remove confirmation
+    Progress,       // operation running
+    Done,           // finished, press q to exit
+    InstalledView,  // viewing installed packages system-wide
+    PackageDetail,  // Ctrl+I full-screen package info panel
+    GraveyardView,  // s8n xum — browse/recover buried packages
+    BurialProgress, // s8n brn — burial/exhume animation
 }
 
 struct App {
@@ -93,6 +98,18 @@ struct App {
     installed_results: Vec<PackageInfo>,
     installed_loaded: bool,
 
+    // Package detail panel (Ctrl+I)
+    detail_package: Option<PackageInfo>,
+
+    // Graveyard view (s8n xum)
+    graveyard_entries: Vec<BuriedEntry>,
+    graveyard_selected: usize,
+
+    // Burial/exhume progress animation (s8n brn / s8n xum)
+    burial_files: Vec<String>,           // package names being processed
+    burial_results: Vec<Option<String>>, // Some(graveyard_path) when done
+    burial_is_exhume: bool,              // true = recovery, false = burial
+
     should_quit: bool,
 }
 
@@ -127,6 +144,12 @@ impl App {
             status_message: String::new(),
             installed_results: Vec::new(),
             installed_loaded: false,
+            detail_package: None,
+            graveyard_entries: Vec::new(),
+            graveyard_selected: 0,
+            burial_files: Vec::new(),
+            burial_results: Vec::new(),
+            burial_is_exhume: false,
             should_quit: false,
         }
     }
@@ -257,6 +280,9 @@ fn render(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) 
             Mode::Progress => render_progress_view(f, app, size),
             Mode::Done => render_done_view(f, app, size),
             Mode::InstalledView => render_installed_view(f, app, size),
+            Mode::PackageDetail => render_package_detail(f, app, size),
+            Mode::GraveyardView => render_graveyard_view(f, app, size),
+            Mode::BurialProgress => render_burial_progress(f, app, size),
         }
     })?;
     Ok(())
@@ -921,7 +947,7 @@ fn render_installed_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
         Span::styled(" INSTALLED ", theme::status_bar()),
         Span::styled(" ", Style::default()),
         Span::styled(
-            " ↑↓ navigate • i install • d remove • / filter • Ctrl+F fuzzy • q back",
+            " ↑↓ navigate • i install • d remove • ctrl+i info • / filter • Ctrl+F fuzzy • q back",
             theme::status_text(),
         ),
     ]);
@@ -943,6 +969,9 @@ fn handle_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Option<Ac
         }
         Mode::Progress => None,
         Mode::InstalledView => handle_installed_key(app, key, modifiers),
+        Mode::PackageDetail => handle_detail_key(app, key),
+        Mode::GraveyardView => handle_graveyard_key(app, key),
+        Mode::BurialProgress => None,
     }
 }
 
@@ -1019,6 +1048,13 @@ fn handle_input_key(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) -> Op
 }
 
 fn handle_browse_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
+    if modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('i') {
+        if let Some(pkg) = app.selected_package() {
+            app.detail_package = Some(pkg.clone());
+            app.mode = Mode::PackageDetail;
+        }
+        return None;
+    }
     if modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('f') {
         return Some(Action::FuzzySearch);
     }
@@ -1225,6 +1261,26 @@ fn handle_confirm_key(app: &mut App, key: KeyCode) -> Option<Action> {
 }
 
 fn handle_installed_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
+    if modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('i') {
+        let filter = app.search_input.to_lowercase();
+        let filtered: Vec<&PackageInfo> = app
+            .installed_results
+            .iter()
+            .filter(|p| {
+                filter.is_empty()
+                    || p.name.to_lowercase().contains(&filter)
+                    || p.source.to_lowercase().contains(&filter)
+            })
+            .collect();
+        if let Some(sel) = app.list_state.selected() {
+            let global_idx = app.page * app.page_size + sel;
+            if let Some(pkg) = filtered.get(global_idx) {
+                app.detail_package = Some((*pkg).clone());
+                app.mode = Mode::PackageDetail;
+            }
+        }
+        return None;
+    }
     if modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('f') {
         return Some(Action::FuzzySearchInstalled);
     }
@@ -1324,6 +1380,441 @@ fn handle_installed_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) ->
         _ => {}
     }
     None
+}
+
+// ── Package detail key handler ───────────────────────────────────────────────
+
+fn handle_detail_key(app: &mut App, key: KeyCode) -> Option<Action> {
+    match key {
+        KeyCode::Char('i') => {
+            if let Some(pkg) = app.detail_package.clone() {
+                if pkg.installed {
+                    app.status_message = format!("{} is already installed", pkg.name);
+                    return None;
+                }
+                app.confirm_action = "install".to_string();
+                app.confirm_packages = vec![pkg.name.clone()];
+                app.confirm_source = pkg.source.clone();
+                app.confirm_selected_yes = true;
+                app.mode = Mode::Confirm;
+            }
+        }
+        KeyCode::Char('d') | KeyCode::Char('r') => {
+            if let Some(pkg) = app.detail_package.clone() {
+                app.confirm_action = "remove".to_string();
+                app.confirm_packages = vec![pkg.name.clone()];
+                app.confirm_source = pkg.source.clone();
+                app.confirm_selected_yes = true;
+                app.mode = Mode::Confirm;
+            }
+        }
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.detail_package = None;
+            // Return to whichever view we came from
+            if app.installed_loaded && !app.installed_results.is_empty()
+                && app.all_results.is_empty()
+            {
+                app.mode = Mode::InstalledView;
+            } else {
+                app.mode = Mode::Browse;
+            }
+        }
+        _ => {}
+    }
+    None
+}
+
+// ── Graveyard key handler ────────────────────────────────────────────────────
+
+fn handle_graveyard_key(app: &mut App, key: KeyCode) -> Option<Action> {
+    match key {
+        KeyCode::Up => {
+            if app.graveyard_selected > 0 {
+                app.graveyard_selected -= 1;
+            }
+        }
+        KeyCode::Down => {
+            if app.graveyard_selected + 1 < app.graveyard_entries.len() {
+                app.graveyard_selected += 1;
+            }
+        }
+        KeyCode::Char('q') | KeyCode::Esc => {
+            app.should_quit = true;
+        }
+        _ => {}
+    }
+    None
+}
+
+// ── New render functions ─────────────────────────────────────────────────────
+
+fn render_package_detail(f: &mut ratatui::Frame, app: &App, area: Rect) {
+    f.render_widget(
+        Block::default().style(Style::default().bg(theme::bg_color())),
+        area,
+    );
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // title
+            Constraint::Min(5),    // content box
+            Constraint::Length(1), // help
+        ])
+        .split(area);
+
+    // Title bar
+    let title_text = if let Some(pkg) = &app.detail_package {
+        format!("  📦 {}  ", pkg.name)
+    } else {
+        "  Package Detail  ".to_string()
+    };
+    f.render_widget(
+        Paragraph::new(Span::styled(title_text, theme::title())),
+        chunks[0],
+    );
+
+    let Some(pkg) = &app.detail_package else {
+        return;
+    };
+
+    let wrap_width = chunks[1].width.saturating_sub(6) as usize;
+
+    // Word-wrap the description
+    let desc_lines: Vec<Line> = if pkg.description.is_empty() {
+        vec![Line::from(Span::styled(
+            "  (No description available)",
+            theme::dim(),
+        ))]
+    } else {
+        let mut lines: Vec<Line> = Vec::new();
+        let mut current = String::new();
+        for word in pkg.description.split_whitespace() {
+            if current.len() + word.len() + 1 > wrap_width.saturating_sub(2) && !current.is_empty()
+            {
+                lines.push(Line::from(Span::styled(
+                    format!("  {}", current.trim()),
+                    theme::desc(),
+                )));
+                current.clear();
+            }
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(word);
+        }
+        if !current.is_empty() {
+            lines.push(Line::from(Span::styled(
+                format!("  {}", current.trim()),
+                theme::desc(),
+            )));
+        }
+        lines
+    };
+
+    let installed_label = if pkg.installed {
+        Span::styled("  ✓ Installed", Style::default().fg(theme::neon_green()))
+    } else {
+        Span::styled("  Not installed", theme::dim())
+    };
+
+    let mut text_lines: Vec<Line> = vec![
+        Line::from(vec![
+            Span::styled("  Name:    ", theme::grid_header()),
+            Span::styled(pkg.name.clone(), theme::pkg_name()),
+        ]),
+        Line::from(vec![
+            Span::styled("  Version: ", theme::grid_header()),
+            Span::styled(
+                if pkg.version.is_empty() { "—".to_string() } else { pkg.version.clone() },
+                theme::version(),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Source:  ", theme::grid_header()),
+            Span::styled(pkg.source.clone(), theme::source_tag()),
+        ]),
+        Line::from(vec![
+            Span::styled("  Status:  ", theme::grid_header()),
+            installed_label,
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("  Description:", theme::grid_header())),
+    ];
+    text_lines.extend(desc_lines);
+    text_lines.push(Line::from(""));
+    text_lines.push(Line::from(vec![
+        Span::styled("  ", Style::default()),
+        if !pkg.installed {
+            Span::styled(" i  Install ", theme::btn_yes())
+        } else {
+            Span::styled(" i  Reinstall ", theme::btn_dim())
+        },
+        Span::raw("   "),
+        Span::styled(" d  Remove ", theme::btn_no()),
+        Span::raw("   "),
+        Span::styled(" Esc  Back ", theme::btn_dim()),
+    ]));
+
+    f.render_widget(
+        Paragraph::new(text_lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(theme::border())
+                .style(Style::default().bg(theme::bg_color())),
+        ),
+        chunks[1],
+    );
+
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            " i install  •  d remove  •  Esc back",
+            theme::status_text(),
+        )),
+        chunks[2],
+    );
+}
+
+fn render_graveyard_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
+    f.render_widget(
+        Block::default().style(Style::default().bg(theme::bg_color())),
+        area,
+    );
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(4),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            format!(
+                "  🪦 S8n Graveyard — {} buried packages ",
+                app.graveyard_entries.len()
+            ),
+            theme::title(),
+        )),
+        chunks[0],
+    );
+
+    if app.graveyard_entries.is_empty() {
+        f.render_widget(
+            Paragraph::new(vec![
+                Line::from(""),
+                Line::from(Span::styled(
+                    "  The graveyard is empty.",
+                    theme::dim(),
+                )),
+                Line::from(Span::styled(
+                    "  Use \"s8n brn <package>\" to bury packages here.",
+                    theme::dim(),
+                )),
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(theme::border())
+                    .style(Style::default().bg(theme::bg_color())),
+            ),
+            chunks[1],
+        );
+    } else {
+        let path_max = (chunks[1].width as usize).saturating_sub(4 + 20 + 10 + 10 + 6).max(8);
+        let rows: Vec<grid_table::GridRow> = app
+            .graveyard_entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| grid_table::GridRow {
+                cells: vec![
+                    grid_table::GridCell { text: format!("{}", i + 1), style: theme::number() },
+                    grid_table::GridCell {
+                        text: e.name.chars().take(18).collect(),
+                        style: theme::pkg_name(),
+                    },
+                    grid_table::GridCell { text: e.modified_str(), style: theme::version() },
+                    grid_table::GridCell { text: e.size_str(), style: theme::source_tag() },
+                    grid_table::GridCell {
+                        text: e.original_path.to_string_lossy().chars().take(path_max).collect(),
+                        style: theme::desc(),
+                    },
+                ],
+            })
+            .collect();
+
+        let columns = [
+            grid_table::Column { header: "#",             width: Constraint::Length(4) },
+            grid_table::Column { header: "Package",       width: Constraint::Length(20) },
+            grid_table::Column { header: "Buried",        width: Constraint::Length(10) },
+            grid_table::Column { header: "Size",          width: Constraint::Length(8) },
+            grid_table::Column { header: "Original Path", width: Constraint::Min(8) },
+        ];
+
+        f.render_widget(
+            grid_table::GridTable {
+                columns: &columns,
+                rows: &rows,
+                selected: Some(app.graveyard_selected),
+                header_style: theme::grid_header(),
+                separator_style: theme::grid_separator(),
+                selected_style: theme::highlight(),
+            },
+            chunks[1],
+        );
+    }
+
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            " ↑↓ navigate  •  Enter recover  •  q / Esc quit",
+            theme::status_text(),
+        )),
+        chunks[2],
+    );
+}
+
+fn render_burial_progress(f: &mut ratatui::Frame, app: &App, area: Rect) {
+    f.render_widget(
+        Block::default().style(Style::default().bg(theme::bg_color())),
+        area,
+    );
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(4),
+        ])
+        .split(area);
+
+    let action_emoji = if app.burial_is_exhume { "🌱" } else { "🪦" };
+    let action_text = if app.burial_is_exhume { "Recovering" } else { "Burying" };
+    let frame = SPINNER_FRAMES[(app.tick as usize) % SPINNER_FRAMES.len()];
+
+    f.render_widget(
+        Paragraph::new(Text::raw(format!(
+            "  {} {}  {} packages...",
+            action_emoji, frame, action_text
+        )))
+        .block(
+            Block::default()
+                .style(Style::default().bg(theme::bg_color())),
+        ),
+        chunks[0],
+    );
+
+    // Items list
+    let items: Vec<ListItem> = app
+        .burial_files
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let done = app.burial_results.get(i).map(|r| r.is_some()).unwrap_or(false);
+            let result_text = app
+                .burial_results
+                .get(i)
+                .and_then(|r| r.as_deref())
+                .unwrap_or("");
+
+            let (icon, icon_style) = if done {
+                if app.burial_is_exhume {
+                    ("  🌱 ", Style::default().fg(theme::neon_green()))
+                } else {
+                    ("  🪦 ", Style::default().fg(theme::vivid_purple()))
+                }
+            } else {
+                let spin = SPINNER_FRAMES[(app.tick as usize + i * 3) % SPINNER_FRAMES.len()];
+                (spin, Style::default().fg(theme::hot_pink()))
+            };
+
+            let line = if done && !result_text.is_empty() {
+                Line::from(vec![
+                    Span::styled(icon.to_string(), icon_style),
+                    Span::styled(name.clone(), theme::dim()),
+                    Span::styled(
+                        format!(
+                            "  {} {}",
+                            if app.burial_is_exhume { "recovered from" } else { "buried in" },
+                            result_text
+                        ),
+                        Style::default().fg(theme::neon_green()),
+                    ),
+                ])
+            } else if done {
+                Line::from(vec![
+                    Span::styled(icon.to_string(), icon_style),
+                    Span::styled(name.clone(), theme::dim()),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::styled(format!("  {} ", icon), icon_style),
+                    Span::styled(
+                        name.clone(),
+                        Style::default()
+                            .fg(theme::hot_pink())
+                            .add_modifier(ratatui::style::Modifier::BOLD),
+                    ),
+                ])
+            };
+            ListItem::new(line)
+        })
+        .collect();
+
+    f.render_widget(
+        List::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(theme::border())
+                .style(Style::default().bg(theme::bg_color())),
+        ),
+        chunks[1],
+    );
+
+    // Progress bar — burial drains (reversed), recovery fills
+    let done_count = app.burial_results.iter().filter(|r| r.is_some()).count();
+    let total = app.burial_files.len().max(1);
+    let ratio = done_count as f64 / total as f64;
+
+    let bar_width = (chunks[2].width as usize).saturating_sub(6).min(80);
+    let filled = if app.burial_is_exhume {
+        (bar_width as f64 * ratio).round() as usize
+    } else {
+        // Burial: show drain — filled portion decreases
+        (bar_width as f64 * (1.0 - ratio)).round() as usize
+    };
+    let empty = bar_width.saturating_sub(filled);
+
+    let gradient_colors = theme::gradient_stops();
+    let color_count = gradient_colors.len();
+    let phase = (app.tick as usize) % (color_count * 4);
+
+    let mut spans: Vec<Span> = vec![Span::raw("  ")];
+    for i in 0..filled {
+        let color_idx = (phase + i) % color_count;
+        spans.push(Span::styled("█", Style::default().fg(gradient_colors[color_idx])));
+    }
+    spans.push(Span::styled(
+        "░".repeat(empty),
+        Style::default().fg(theme::THEME.read().unwrap().surface),
+    ));
+    spans.push(Span::raw(format!("  {}/{}", done_count, total)));
+
+    f.render_widget(
+        Paragraph::new(Line::from(spans)).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(theme::border())
+                .title(Span::styled(
+                    if app.burial_is_exhume { " Recovery Progress " } else { " Burial Progress " },
+                    theme::search_label(),
+                ))
+                .style(Style::default().bg(theme::bg_color())),
+        ),
+        chunks[2],
+    );
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -1848,6 +2339,352 @@ pub async fn run_progress_tui(
     Ok(())
 }
 
+/// Standalone installed-packages view \u2014 used by `s8n shw`
+pub async fn run_installed_view_tui(managers: Vec<Box<dyn PackageManager>>) -> io::Result<()> {
+    theme::reload();
+    terminal::enable_raw_mode()?;
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let mut app = App::new();
+    app.status_message = "Loading installed packages...".to_string();
+    render(&mut terminal, &mut app)?;
+
+    let mut all_installed: Vec<PackageInfo> = Vec::new();
+    for pm in &managers {
+        if !pm.is_available() {
+            continue;
+        }
+        if let Ok(pkgs) = pm.list_installed().await {
+            all_installed.extend(pkgs);
+        }
+    }
+    all_installed.sort_by_key(|a| a.name.to_lowercase());
+    app.installed_results = all_installed;
+    app.installed_loaded = true;
+    app.mode = Mode::InstalledView;
+    app.page = 0;
+    app.list_state
+        .select(if app.installed_results.is_empty() { None } else { Some(0) });
+    app.status_message.clear();
+
+    loop {
+        app.tick += 1;
+        render(&mut terminal, &mut app)?;
+        if app.should_quit {
+            break;
+        }
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key_event) = event::read()? {
+                if let Some(action) = handle_key(&mut app, key_event.code, key_event.modifiers) {
+                    match action {
+                        Action::Remove(pkgs, source) => {
+                            let pm = managers
+                                .iter()
+                                .find(|m| m.name() == source)
+                                .or_else(|| managers.first());
+                            if let Some(pm) = pm {
+                                app.mode = Mode::Progress;
+                                app.progress_items = pkgs
+                                    .iter()
+                                    .map(|p| ProgressItem { name: p.clone(), done: false, success: false })
+                                    .collect();
+                                render(&mut terminal, &mut app)?;
+                                for (i, pkg) in pkgs.iter().enumerate() {
+                                    let result = pm.remove(std::slice::from_ref(pkg)).await;
+                                    if let Some(item) = app.progress_items.get_mut(i) {
+                                        item.done = true;
+                                        item.success = matches!(result, PmResult::Success);
+                                    }
+                                    render(&mut terminal, &mut app)?;
+                                }
+                                app.mode = Mode::Done;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    terminal::disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
+    Ok(())
+}
+
+/// Burial animation TUI \u2014 used by `s8n brn <packages>`
+/// Uninstalls each package via the appropriate package manager, then buries
+/// the package binaries/files via rip2 into the s8n graveyard.
+pub async fn run_burial_tui(
+    graveyard: &GraveyardConfig,
+    managers: &[Box<dyn PackageManager>],
+    packages: &[String],
+    requested_manager: Option<&str>,
+) -> io::Result<()> {
+    theme::reload();
+    terminal::enable_raw_mode()?;
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let mut app = App::new();
+    app.mode = Mode::BurialProgress;
+    app.burial_is_exhume = false;
+    app.burial_files = packages
+        .iter()
+        .map(|p| {
+            // Strip source prefix for display
+            if let Some(colon) = p.find(':') {
+                let pkg = &p[colon + 1..];
+                if !pkg.is_empty() { pkg.to_string() } else { p.clone() }
+            } else {
+                p.clone()
+            }
+        })
+        .collect();
+    app.burial_results = vec![None; packages.len()];
+
+    render(&mut terminal, &mut app)?;
+
+    for (i, raw_pkg) in packages.iter().enumerate() {
+        // Animate a few ticks
+        for _ in 0..6 {
+            app.tick += 1;
+            render(&mut terminal, &mut app)?;
+            tokio::time::sleep(Duration::from_millis(80)).await;
+        }
+
+        // Determine which PM to use
+        let (source, pkg_name) = if let Some(colon) = raw_pkg.find(':') {
+            let src = &raw_pkg[..colon];
+            let name = &raw_pkg[colon + 1..];
+            (Some(src), if name.is_empty() { raw_pkg.as_str() } else { name })
+        } else {
+            (requested_manager, raw_pkg.as_str())
+        };
+
+        let pm_opt = source
+            .and_then(|s| managers.iter().find(|m| m.name() == s))
+            .or_else(|| {
+                managers
+                    .iter()
+                    .find(|m| matches!(m.name(), "apt" | "pacstall" | "brew"))
+            })
+            .or_else(|| managers.first());
+
+        let result = if let Some(pm) = pm_opt {
+            pm.remove(&[pkg_name.to_string()]).await
+        } else {
+            PmResult::Error("No suitable package manager found".into())
+        };
+
+        let path_msg = match result {
+            PmResult::Success => {
+                // Try to bury any leftover binary in PATH
+                let buried_path = if let Ok(bin) = which::which(pkg_name) {
+                    graveyard
+                        .bury(&[bin])
+                        .await
+                        .ok()
+                        .and_then(|v| v.into_iter().next())
+                        .map(|b| b.graveyard_path.to_string_lossy().to_string())
+                } else {
+                    None
+                };
+                buried_path.unwrap_or_else(|| "removed via package manager".to_string())
+            }
+            PmResult::Error(e) => format!("ERROR: {}", e),
+            _ => "done".to_string(),
+        };
+
+        app.burial_results[i] = Some(path_msg);
+        render(&mut terminal, &mut app)?;
+    }
+
+    // Wait for keypress
+    loop {
+        app.tick += 1;
+        render(&mut terminal, &mut app)?;
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter) {
+                    break;
+                }
+            }
+        }
+    }
+
+    terminal::disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
+    Ok(())
+}
+
+/// Exhumation (recovery) TUI \u2014 used by `s8n xum <packages>`
+pub async fn run_exhume_tui(
+    graveyard: &GraveyardConfig,
+    managers: &[Box<dyn PackageManager>],
+    packages: &[String],
+) -> io::Result<()> {
+    theme::reload();
+    terminal::enable_raw_mode()?;
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let mut app = App::new();
+    app.mode = Mode::BurialProgress;
+    app.burial_is_exhume = true;
+    app.burial_files = packages.to_vec();
+    app.burial_results = vec![None; packages.len()];
+
+    render(&mut terminal, &mut app)?;
+
+    for (i, pkg) in packages.iter().enumerate() {
+        for _ in 0..6 {
+            app.tick += 1;
+            render(&mut terminal, &mut app)?;
+            tokio::time::sleep(Duration::from_millis(80)).await;
+        }
+
+        let result = graveyard.exhume(Some(&[pkg.clone()])).await;
+        let msg = match result {
+            Ok(()) => {
+                // Try to re-install if a suitable PM exists
+                let pm_opt = managers
+                    .iter()
+                    .find(|m| matches!(m.name(), "apt" | "pacstall" | "brew"))
+                    .or_else(|| managers.first());
+                if let Some(pm) = pm_opt {
+                    match pm.install(&[pkg.clone()]).await {
+                        PmResult::Success => format!("reinstalled via {}", pm.name()),
+                        _ => "files recovered from graveyard".to_string(),
+                    }
+                } else {
+                    "files recovered from graveyard".to_string()
+                }
+            }
+            Err(e) => format!("ERROR: {}", e),
+        };
+
+        app.burial_results[i] = Some(msg);
+        render(&mut terminal, &mut app)?;
+    }
+
+    loop {
+        app.tick += 1;
+        render(&mut terminal, &mut app)?;
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter) {
+                    break;
+                }
+            }
+        }
+    }
+
+    terminal::disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
+    Ok(())
+}
+
+/// Interactive graveyard browser \u2014 used by `s8n xum` (no args)
+pub async fn run_graveyard_tui(
+    graveyard: &GraveyardConfig,
+    managers: &[Box<dyn PackageManager>],
+) -> io::Result<()> {
+    theme::reload();
+    terminal::enable_raw_mode()?;
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen, cursor::Hide)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let mut app = App::new();
+    app.mode = Mode::GraveyardView;
+    app.graveyard_entries = graveyard.list_buried();
+
+    loop {
+        app.tick += 1;
+        render(&mut terminal, &mut app)?;
+        if app.should_quit {
+            break;
+        }
+
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                if key.code == KeyCode::Enter && !app.graveyard_entries.is_empty() {
+                    // Recover the selected entry
+                    if let Some(entry) = app.graveyard_entries.get(app.graveyard_selected) {
+                        let pkg_name = entry.name.clone();
+                        app.mode = Mode::BurialProgress;
+                        app.burial_is_exhume = true;
+                        app.burial_files = vec![pkg_name.clone()];
+                        app.burial_results = vec![None];
+
+                        for _ in 0..6 {
+                            app.tick += 1;
+                            render(&mut terminal, &mut app)?;
+                            tokio::time::sleep(Duration::from_millis(80)).await;
+                        }
+
+                        let result = graveyard.exhume(Some(&[pkg_name.clone()])).await;
+                        let msg = match result {
+                            Ok(()) => {
+                                let pm_opt = managers
+                                    .iter()
+                                    .find(|m| matches!(m.name(), "apt" | "pacstall" | "brew"))
+                                    .or_else(|| managers.first());
+                                if let Some(pm) = pm_opt {
+                                    match pm.install(&[pkg_name.clone()]).await {
+                                        PmResult::Success => format!("reinstalled via {}", pm.name()),
+                                        _ => "recovered from graveyard".to_string(),
+                                    }
+                                } else {
+                                    "recovered from graveyard".to_string()
+                                }
+                            }
+                            Err(e) => format!("ERROR: {}", e),
+                        };
+                        app.burial_results[0] = Some(msg);
+                        render(&mut terminal, &mut app)?;
+
+                        // Wait for keypress, then return to graveyard
+                        loop {
+                            if event::poll(Duration::from_millis(100))? {
+                                if let Event::Key(k) = event::read()? {
+                                    if matches!(
+                                        k.code,
+                                        KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter
+                                    ) {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        app.graveyard_entries = graveyard.list_buried();
+                        app.graveyard_selected = app
+                            .graveyard_selected
+                            .min(app.graveyard_entries.len().saturating_sub(1));
+                        app.mode = Mode::GraveyardView;
+                    }
+                } else {
+                    handle_key(&mut app, key.code, key.modifiers);
+                }
+            }
+        }
+    }
+
+    terminal::disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, cursor::Show)?;
+    Ok(())
+}
+
 /// Search all available managers concurrently and collect results
 /// Search all available managers concurrently and collect results
 async fn search_all(
@@ -1864,9 +2701,12 @@ async fn search_all(
 
     // Search sequentially to avoid overwhelming the terminal
     for pm in managers {
-        if !pm.is_available() || matches!(pm.name(), "topgrade" | "bun") {
+        if !pm.is_available()
+            || matches!(pm.name(), "topgrade" | "bun" | "cargo-binstall")
+        {
             continue;
         }
+
         for term in &terms {
             if let Ok(pkgs) = pm.search_captured(term).await {
                 if !pkgs.is_empty() {

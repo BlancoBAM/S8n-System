@@ -2,6 +2,7 @@ use crate::pm::{builtin::get_default_managers, PackageManager};
 use clap::{Parser, Subcommand};
 
 pub mod config;
+pub mod graveyard;
 pub mod pm;
 pub mod tui;
 
@@ -17,17 +18,32 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Search for packages across all sources (opens interactive TUI)
-    #[command(alias = "find")]
+    /// Search for packages across all available sources and display results in an
+    /// interactive table (wraps apt search, cargo search, flatpak search, etc.)
+    #[command(alias = "find", alias = "srch")]
     Search { query: Option<String> },
 
     /// Install packages (supports source:package syntax, e.g. apt:firefox)
     #[command(alias = "install")]
     Stall { packages: Vec<String> },
 
-    /// Remove packages
+    /// Remove packages tracked by S8n (uninstalls via the appropriate package manager)
     #[command(alias = "remove", alias = "uninstall")]
     Burn { packages: Vec<String> },
+
+    /// Bury (remove) S8n-tracked packages via rip2 graveyard so they can be recovered later
+    /// Supports source:package syntax, e.g. "s8n brn apt:vim" or "s8n brn firefox"
+    #[command(alias = "bury")]
+    Brn { packages: Vec<String> },
+
+    /// Exhume (recover) packages previously buried with `s8n brn`
+    /// Run without arguments to list the graveyard interactively
+    #[command(alias = "recover", alias = "restore")]
+    Xum { packages: Vec<String> },
+
+    /// List all installed packages system-wide from all tracked package managers
+    #[command(alias = "list", alias = "installed")]
+    Shw,
 
     /// Update all system packages
     #[command(alias = "update", alias = "upgrade")]
@@ -69,6 +85,7 @@ fn parse_source_prefix(input: &str) -> (Option<&str>, &str) {
         // Only treat as source prefix if source is a known PM name
         let known = [
             "apt", "pacstall", "flatpak", "snap", "brew", "soar", "npm", "bun", "pip",
+            "cargo", "cargo-binstall", "am",
         ];
         if known.contains(&source) && !pkg.is_empty() {
             return (Some(source), pkg);
@@ -178,8 +195,109 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if packages.is_empty() {
                 return Err("Provide at least one package to remove".into());
             }
-            let pm = choose_primary_manager(&available_managers, requested_manager)?;
-            tui::run_progress_tui(pm, packages, "remove").await?;
+            // Group by source prefix
+            let mut by_source: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
+            let mut default_pkgs = Vec::new();
+            for pkg in &packages {
+                let (source, name) = parse_source_prefix(pkg);
+                if let Some(src) = source {
+                    by_source.entry(src.to_string()).or_default().push(name.to_string());
+                } else {
+                    default_pkgs.push(name.to_string());
+                }
+            }
+            for (source, src_pkgs) in &by_source {
+                if let Ok(pm) = choose_primary_manager(&available_managers, Some(source)) {
+                    tui::run_progress_tui(pm, src_pkgs.clone(), "remove").await?;
+                }
+            }
+            if !default_pkgs.is_empty() {
+                let pm = choose_primary_manager(&available_managers, requested_manager)?;
+                tui::run_progress_tui(pm, default_pkgs, "remove").await?;
+            }
+        }
+
+        Some(Commands::Brn { packages }) => {
+            if packages.is_empty() {
+                return Err("Provide at least one package name to bury".into());
+            }
+            // Build graveyard config — if rip2 is not available, fall back to plain remove
+            match graveyard::GraveyardConfig::new() {
+                Ok(gyard) => {
+                    // Group by source
+                    let mut by_source: std::collections::HashMap<String, Vec<String>> =
+                        std::collections::HashMap::new();
+                    let mut default_pkgs = Vec::new();
+                    for pkg in &packages {
+                        let (source, name) = parse_source_prefix(pkg);
+                        if let Some(src) = source {
+                            by_source.entry(src.to_string()).or_default().push(name.to_string());
+                        } else {
+                            default_pkgs.push(name.to_string());
+                        }
+                    }
+                    // Resolve managers for source-specific packages
+                    let mut all_pkgs_with_pm: Vec<(String, &dyn PackageManager)> = Vec::new();
+                    for (source, src_pkgs) in &by_source {
+                        if let Ok(pm) = choose_primary_manager(&available_managers, Some(source)) {
+                            for pkg in src_pkgs {
+                                all_pkgs_with_pm.push((pkg.clone(), pm));
+                            }
+                        }
+                    }
+                    if !default_pkgs.is_empty() {
+                        let pm = choose_primary_manager(&available_managers, requested_manager)?;
+                        for pkg in &default_pkgs {
+                            all_pkgs_with_pm.push((pkg.clone(), pm));
+                        }
+                    }
+                    tui::run_burial_tui(&gyard, &available_managers, &packages, requested_manager).await?;
+                }
+                Err(_) => {
+                    // rip2 not installed — fall back to plain remove with a notice
+                    eprintln!("Note: rip2 is not installed; using plain removal (no graveyard). Install with: cargo install rm-improved");
+                    let mut by_source: std::collections::HashMap<String, Vec<String>> =
+                        std::collections::HashMap::new();
+                    let mut default_pkgs = Vec::new();
+                    for pkg in &packages {
+                        let (source, name) = parse_source_prefix(pkg);
+                        if let Some(src) = source {
+                            by_source.entry(src.to_string()).or_default().push(name.to_string());
+                        } else {
+                            default_pkgs.push(name.to_string());
+                        }
+                    }
+                    for (source, src_pkgs) in &by_source {
+                        if let Ok(pm) = choose_primary_manager(&available_managers, Some(source)) {
+                            tui::run_progress_tui(pm, src_pkgs.clone(), "remove").await?;
+                        }
+                    }
+                    if !default_pkgs.is_empty() {
+                        let pm = choose_primary_manager(&available_managers, requested_manager)?;
+                        tui::run_progress_tui(pm, default_pkgs, "remove").await?;
+                    }
+                }
+            }
+        }
+
+        Some(Commands::Xum { packages }) => {
+            match graveyard::GraveyardConfig::new() {
+                Ok(gyard) => {
+                    if packages.is_empty() {
+                        tui::run_graveyard_tui(&gyard, &available_managers).await?;
+                    } else {
+                        tui::run_exhume_tui(&gyard, &available_managers, &packages).await?;
+                    }
+                }
+                Err(e) => {
+                    return Err(format!("Cannot open graveyard: {}", e).into());
+                }
+            }
+        }
+
+        Some(Commands::Shw) => {
+            tui::run_installed_view_tui(available_managers).await?;
         }
 
         Some(Commands::Upd8) => {
