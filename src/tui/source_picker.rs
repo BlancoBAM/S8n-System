@@ -77,10 +77,7 @@ async fn picker_loop(
                             format!("Multiple sources found for \"{}\"", pkg_name),
                             Style::default().fg(theme::vivid_purple()),
                         ),
-                        Span::styled(
-                            " — choose one:",
-                            theme::dim(),
-                        ),
+                        Span::styled(" — choose one:", theme::dim()),
                     ]))
                     .block(
                         Block::default()
@@ -92,7 +89,9 @@ async fn picker_loop(
                 );
 
                 // Table
-                let desc_max = (chunks[1].width as usize).saturating_sub(4 + 16 + 14 + 6).max(10);
+                let desc_max = (chunks[1].width as usize)
+                    .saturating_sub(4 + 16 + 14 + 6)
+                    .max(10);
                 let rows: Vec<grid_table::GridRow> = candidates
                     .iter()
                     .enumerate()
@@ -105,20 +104,44 @@ async fn picker_loop(
                         let desc: String = pkg.description.chars().take(desc_max).collect();
                         grid_table::GridRow {
                             cells: vec![
-                                grid_table::GridCell { text: format!("{}", i + 1), style: theme::number() },
-                                grid_table::GridCell { text: pkg.source.clone(), style: theme::source_tag() },
-                                grid_table::GridCell { text: ver, style: theme::version() },
-                                grid_table::GridCell { text: desc, style: theme::desc() },
+                                grid_table::GridCell {
+                                    text: format!("{}", i + 1),
+                                    style: theme::number(),
+                                },
+                                grid_table::GridCell {
+                                    text: pkg.source.clone(),
+                                    style: theme::source_tag(),
+                                },
+                                grid_table::GridCell {
+                                    text: ver,
+                                    style: theme::version(),
+                                },
+                                grid_table::GridCell {
+                                    text: desc,
+                                    style: theme::desc(),
+                                },
                             ],
                         }
                     })
                     .collect();
 
                 let columns = [
-                    grid_table::Column { header: "#",           width: Constraint::Length(4) },
-                    grid_table::Column { header: "Source",      width: Constraint::Length(16) },
-                    grid_table::Column { header: "Version",     width: Constraint::Length(14) },
-                    grid_table::Column { header: "Description", width: Constraint::Min(10) },
+                    grid_table::Column {
+                        header: "#",
+                        width: Constraint::Length(4),
+                    },
+                    grid_table::Column {
+                        header: "Source",
+                        width: Constraint::Length(16),
+                    },
+                    grid_table::Column {
+                        header: "Version",
+                        width: Constraint::Length(14),
+                    },
+                    grid_table::Column {
+                        header: "Description",
+                        width: Constraint::Min(10),
+                    },
                 ];
 
                 f.render_widget(
@@ -151,7 +174,9 @@ async fn picker_loop(
                         selected = selected.saturating_sub(1);
                     }
                     KeyCode::Down => {
-                        if selected + 1 < candidates.len() { selected += 1; }
+                        if selected + 1 < candidates.len() {
+                            selected += 1;
+                        }
                     }
                     KeyCode::Enter => return Some(selected),
                     KeyCode::Char('q') | KeyCode::Esc => return None,

@@ -29,9 +29,9 @@ impl GraveyardConfig {
     ///
     /// Graveyard dir: $XDG_DATA_HOME/graveyard/s8n or ~/.local/share/graveyard/s8n
     pub fn new() -> Result<Self, String> {
-        let rip_bin = which("rip")
-            .or_else(|_| which("rip2"))
-            .map_err(|_| "rip2 is not installed. Install it with: cargo install rm-improved".to_string())?;
+        let rip_bin = which("rip").or_else(|_| which("rip2")).map_err(|_| {
+            "rip2 is not installed. Install it with: cargo install rm-improved".to_string()
+        })?;
 
         let base = std::env::var("XDG_DATA_HOME")
             .map(PathBuf::from)
@@ -55,9 +55,7 @@ impl GraveyardConfig {
         let mut buried = Vec::new();
 
         for file in files {
-            let canonical = file
-                .canonicalize()
-                .unwrap_or_else(|_| file.clone());
+            let canonical = file.canonicalize().unwrap_or_else(|_| file.clone());
 
             let status = Command::new(&self.rip_bin)
                 .arg("--graveyard")
@@ -74,7 +72,10 @@ impl GraveyardConfig {
             // rip places files in graveyard/<original_path_without_leading_slash>
             // e.g. burying /home/user/test.txt -> s8n_dir/home/user/test.txt
             let relative = if canonical.is_absolute() {
-                canonical.strip_prefix("/").unwrap_or(&canonical).to_path_buf()
+                canonical
+                    .strip_prefix("/")
+                    .unwrap_or(&canonical)
+                    .to_path_buf()
             } else {
                 canonical.clone()
             };

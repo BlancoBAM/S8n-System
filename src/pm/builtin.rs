@@ -676,7 +676,9 @@ fn parse_cargo_search_output(output: &str) -> Vec<PackageInfo> {
             continue;
         }
         // Format: `crate-name = "version"    # description`
-        let Some(eq_pos) = t.find(" = \"") else { continue };
+        let Some(eq_pos) = t.find(" = \"") else {
+            continue;
+        };
         let name = t[..eq_pos].trim();
         let rest = &t[eq_pos + 4..];
         let (version, description) = if let Some(hash_pos) = rest.find("\" # ") {
@@ -686,7 +688,9 @@ fn parse_cargo_search_output(output: &str) -> Vec<PackageInfo> {
         } else {
             (rest, "")
         };
-        if name.is_empty() { continue; }
+        if name.is_empty() {
+            continue;
+        }
         results.push(PackageInfo {
             name: name.to_string(),
             version: version.trim().to_string(),
@@ -780,13 +784,17 @@ impl PackageManager for AmWrapper {
     async fn install(&self, packages: &[String]) -> PmResult {
         let mut cmd = Command::new(&self.binary);
         cmd.arg("-i");
-        for pkg in packages { cmd.arg(pkg); }
+        for pkg in packages {
+            cmd.arg(pkg);
+        }
         run_command_quiet(&mut cmd).await
     }
     async fn remove(&self, packages: &[String]) -> PmResult {
         let mut cmd = Command::new(&self.binary);
         cmd.arg("-R");
-        for pkg in packages { cmd.arg(pkg); }
+        for pkg in packages {
+            cmd.arg(pkg);
+        }
         run_command_quiet(&mut cmd).await
     }
     async fn update(&self) -> PmResult {
@@ -949,7 +957,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
         Box::new(GenericWrapper {
             name: "cargo-binstall".into(),
             binary: "cargo-binstall".into(),
-            search_cmd: vec![],  // no native search; installs are via cargo-binstall
+            search_cmd: vec![], // no native search; installs are via cargo-binstall
             install_cmd: vec!["--no-confirm".into()],
             remove_cmd: vec![], // removal is handled by `cargo uninstall`
             update_cmd: vec!["--no-confirm".into()],

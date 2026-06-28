@@ -1411,7 +1411,8 @@ fn handle_detail_key(app: &mut App, key: KeyCode) -> Option<Action> {
         KeyCode::Esc | KeyCode::Char('q') => {
             app.detail_package = None;
             // Return to whichever view we came from
-            if app.installed_loaded && !app.installed_results.is_empty()
+            if app.installed_loaded
+                && !app.installed_results.is_empty()
                 && app.all_results.is_empty()
             {
                 app.mode = Mode::InstalledView;
@@ -1526,7 +1527,11 @@ fn render_package_detail(f: &mut ratatui::Frame, app: &App, area: Rect) {
         Line::from(vec![
             Span::styled("  Version: ", theme::grid_header()),
             Span::styled(
-                if pkg.version.is_empty() { "—".to_string() } else { pkg.version.clone() },
+                if pkg.version.is_empty() {
+                    "—".to_string()
+                } else {
+                    pkg.version.clone()
+                },
                 theme::version(),
             ),
         ]),
@@ -1605,10 +1610,7 @@ fn render_graveyard_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
         f.render_widget(
             Paragraph::new(vec![
                 Line::from(""),
-                Line::from(Span::styled(
-                    "  The graveyard is empty.",
-                    theme::dim(),
-                )),
+                Line::from(Span::styled("  The graveyard is empty.", theme::dim())),
                 Line::from(Span::styled(
                     "  Use \"s8n brn <package>\" to bury packages here.",
                     theme::dim(),
@@ -1623,22 +1625,38 @@ fn render_graveyard_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
             chunks[1],
         );
     } else {
-        let path_max = (chunks[1].width as usize).saturating_sub(4 + 20 + 10 + 10 + 6).max(8);
+        let path_max = (chunks[1].width as usize)
+            .saturating_sub(4 + 20 + 10 + 10 + 6)
+            .max(8);
         let rows: Vec<grid_table::GridRow> = app
             .graveyard_entries
             .iter()
             .enumerate()
             .map(|(i, e)| grid_table::GridRow {
                 cells: vec![
-                    grid_table::GridCell { text: format!("{}", i + 1), style: theme::number() },
+                    grid_table::GridCell {
+                        text: format!("{}", i + 1),
+                        style: theme::number(),
+                    },
                     grid_table::GridCell {
                         text: e.name.chars().take(18).collect(),
                         style: theme::pkg_name(),
                     },
-                    grid_table::GridCell { text: e.modified_str(), style: theme::version() },
-                    grid_table::GridCell { text: e.size_str(), style: theme::source_tag() },
                     grid_table::GridCell {
-                        text: e.original_path.to_string_lossy().chars().take(path_max).collect(),
+                        text: e.modified_str(),
+                        style: theme::version(),
+                    },
+                    grid_table::GridCell {
+                        text: e.size_str(),
+                        style: theme::source_tag(),
+                    },
+                    grid_table::GridCell {
+                        text: e
+                            .original_path
+                            .to_string_lossy()
+                            .chars()
+                            .take(path_max)
+                            .collect(),
                         style: theme::desc(),
                     },
                 ],
@@ -1646,11 +1664,26 @@ fn render_graveyard_view(f: &mut ratatui::Frame, app: &App, area: Rect) {
             .collect();
 
         let columns = [
-            grid_table::Column { header: "#",             width: Constraint::Length(4) },
-            grid_table::Column { header: "Package",       width: Constraint::Length(20) },
-            grid_table::Column { header: "Buried",        width: Constraint::Length(10) },
-            grid_table::Column { header: "Size",          width: Constraint::Length(8) },
-            grid_table::Column { header: "Original Path", width: Constraint::Min(8) },
+            grid_table::Column {
+                header: "#",
+                width: Constraint::Length(4),
+            },
+            grid_table::Column {
+                header: "Package",
+                width: Constraint::Length(20),
+            },
+            grid_table::Column {
+                header: "Buried",
+                width: Constraint::Length(10),
+            },
+            grid_table::Column {
+                header: "Size",
+                width: Constraint::Length(8),
+            },
+            grid_table::Column {
+                header: "Original Path",
+                width: Constraint::Min(8),
+            },
         ];
 
         f.render_widget(
@@ -1691,7 +1724,11 @@ fn render_burial_progress(f: &mut ratatui::Frame, app: &App, area: Rect) {
         .split(area);
 
     let action_emoji = if app.burial_is_exhume { "🌱" } else { "🪦" };
-    let action_text = if app.burial_is_exhume { "Recovering" } else { "Burying" };
+    let action_text = if app.burial_is_exhume {
+        "Recovering"
+    } else {
+        "Burying"
+    };
     let frame = SPINNER_FRAMES[(app.tick as usize) % SPINNER_FRAMES.len()];
 
     f.render_widget(
@@ -1699,10 +1736,7 @@ fn render_burial_progress(f: &mut ratatui::Frame, app: &App, area: Rect) {
             "  {} {}  {} packages...",
             action_emoji, frame, action_text
         )))
-        .block(
-            Block::default()
-                .style(Style::default().bg(theme::bg_color())),
-        ),
+        .block(Block::default().style(Style::default().bg(theme::bg_color()))),
         chunks[0],
     );
 
@@ -1712,7 +1746,11 @@ fn render_burial_progress(f: &mut ratatui::Frame, app: &App, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, name)| {
-            let done = app.burial_results.get(i).map(|r| r.is_some()).unwrap_or(false);
+            let done = app
+                .burial_results
+                .get(i)
+                .map(|r| r.is_some())
+                .unwrap_or(false);
             let result_text = app
                 .burial_results
                 .get(i)
@@ -1737,7 +1775,11 @@ fn render_burial_progress(f: &mut ratatui::Frame, app: &App, area: Rect) {
                     Span::styled(
                         format!(
                             "  {} {}",
-                            if app.burial_is_exhume { "recovered from" } else { "buried in" },
+                            if app.burial_is_exhume {
+                                "recovered from"
+                            } else {
+                                "buried in"
+                            },
                             result_text
                         ),
                         Style::default().fg(theme::neon_green()),
@@ -1794,7 +1836,10 @@ fn render_burial_progress(f: &mut ratatui::Frame, app: &App, area: Rect) {
     let mut spans: Vec<Span> = vec![Span::raw("  ")];
     for i in 0..filled {
         let color_idx = (phase + i) % color_count;
-        spans.push(Span::styled("█", Style::default().fg(gradient_colors[color_idx])));
+        spans.push(Span::styled(
+            "█",
+            Style::default().fg(gradient_colors[color_idx]),
+        ));
     }
     spans.push(Span::styled(
         "░".repeat(empty),
@@ -1808,7 +1853,11 @@ fn render_burial_progress(f: &mut ratatui::Frame, app: &App, area: Rect) {
                 .borders(Borders::ALL)
                 .border_style(theme::border())
                 .title(Span::styled(
-                    if app.burial_is_exhume { " Recovery Progress " } else { " Burial Progress " },
+                    if app.burial_is_exhume {
+                        " Recovery Progress "
+                    } else {
+                        " Burial Progress "
+                    },
                     theme::search_label(),
                 ))
                 .style(Style::default().bg(theme::bg_color())),
@@ -2303,11 +2352,7 @@ pub async fn run_progress_tui(
 
         // Resume the TUI alternate screen to show the updated result
         terminal::enable_raw_mode()?;
-        execute!(
-            terminal.backend_mut(),
-            EnterAlternateScreen,
-            cursor::Hide
-        )?;
+        execute!(terminal.backend_mut(), EnterAlternateScreen, cursor::Hide)?;
         terminal.clear()?;
 
         if let Some(item) = app.progress_items.get_mut(i) {
@@ -2366,8 +2411,11 @@ pub async fn run_installed_view_tui(managers: Vec<Box<dyn PackageManager>>) -> i
     app.installed_loaded = true;
     app.mode = Mode::InstalledView;
     app.page = 0;
-    app.list_state
-        .select(if app.installed_results.is_empty() { None } else { Some(0) });
+    app.list_state.select(if app.installed_results.is_empty() {
+        None
+    } else {
+        Some(0)
+    });
     app.status_message.clear();
 
     loop {
@@ -2378,7 +2426,9 @@ pub async fn run_installed_view_tui(managers: Vec<Box<dyn PackageManager>>) -> i
         }
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key_event) = event::read()? {
-                if let Some(Action::Remove(pkgs, source)) = handle_key(&mut app, key_event.code, key_event.modifiers) {
+                if let Some(Action::Remove(pkgs, source)) =
+                    handle_key(&mut app, key_event.code, key_event.modifiers)
+                {
                     let pm = managers
                         .iter()
                         .find(|m| m.name() == source)
@@ -2387,7 +2437,11 @@ pub async fn run_installed_view_tui(managers: Vec<Box<dyn PackageManager>>) -> i
                         app.mode = Mode::Progress;
                         app.progress_items = pkgs
                             .iter()
-                            .map(|p| ProgressItem { name: p.clone(), done: false, success: false })
+                            .map(|p| ProgressItem {
+                                name: p.clone(),
+                                done: false,
+                                success: false,
+                            })
                             .collect();
                         render(&mut terminal, &mut app)?;
                         for (i, pkg) in pkgs.iter().enumerate() {
@@ -2435,7 +2489,11 @@ pub async fn run_burial_tui(
             // Strip source prefix for display
             if let Some(colon) = p.find(':') {
                 let pkg = &p[colon + 1..];
-                if !pkg.is_empty() { pkg.to_string() } else { p.clone() }
+                if !pkg.is_empty() {
+                    pkg.to_string()
+                } else {
+                    p.clone()
+                }
             } else {
                 p.clone()
             }
@@ -2457,7 +2515,14 @@ pub async fn run_burial_tui(
         let (source, pkg_name) = if let Some(colon) = raw_pkg.find(':') {
             let src = &raw_pkg[..colon];
             let name = &raw_pkg[colon + 1..];
-            (Some(src), if name.is_empty() { raw_pkg.as_str() } else { name })
+            (
+                Some(src),
+                if name.is_empty() {
+                    raw_pkg.as_str()
+                } else {
+                    name
+                },
+            )
         } else {
             (requested_manager, raw_pkg.as_str())
         };
@@ -2627,7 +2692,9 @@ pub async fn run_graveyard_tui(
                             tokio::time::sleep(Duration::from_millis(80)).await;
                         }
 
-                        let result = graveyard.exhume(Some(std::slice::from_ref(&pkg_name))).await;
+                        let result = graveyard
+                            .exhume(Some(std::slice::from_ref(&pkg_name)))
+                            .await;
                         let msg = match result {
                             Ok(()) => {
                                 let pm_opt = managers
@@ -2636,7 +2703,9 @@ pub async fn run_graveyard_tui(
                                     .or_else(|| managers.first());
                                 if let Some(pm) = pm_opt {
                                     match pm.install(std::slice::from_ref(&pkg_name)).await {
-                                        PmResult::Success => format!("reinstalled via {}", pm.name()),
+                                        PmResult::Success => {
+                                            format!("reinstalled via {}", pm.name())
+                                        }
                                         _ => "recovered from graveyard".to_string(),
                                     }
                                 } else {
@@ -2696,9 +2765,7 @@ async fn search_all(
 
     // Search sequentially to avoid overwhelming the terminal
     for pm in managers {
-        if !pm.is_available()
-            || matches!(pm.name(), "topgrade" | "bun" | "cargo-binstall")
-        {
+        if !pm.is_available() || matches!(pm.name(), "topgrade" | "bun" | "cargo-binstall") {
             continue;
         }
 

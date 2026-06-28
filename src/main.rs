@@ -7,10 +7,21 @@ pub mod pm;
 pub mod tui;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(
+    author,
+    version,
+    about = "S8n — a unified system and package manager TUI for Lilith Linux",
+    long_about = "S8n wraps your installed package managers (apt, flatpak, snap, cargo, am, \
+                  brew, soar, pacstall, and more) into a single beautiful TUI and set of \
+                  short commands. Run `s8n` with no arguments to launch the interactive interface.\n\n\
+                  PACKAGE SYNTAX\n\
+                  \x20 Plain name:          s8n stall firefox\n\
+                  \x20 Source-prefixed:     s8n stall apt:firefox  flatpak:org.mozilla.firefox\n\
+                  \x20 Multiple at once:    s8n stall vim neovim cargo:ripgrep"
+)]
 struct Cli {
-    /// Specify a package manager to use (e.g., apt, flatpak, snap, brew)
-    #[arg(long, short = 'm')]
+    /// Restrict to a specific package manager (e.g. apt, flatpak, snap, cargo, brew)
+    #[arg(long, short = 'm', value_name = "PM")]
     manager: Option<String>,
     #[command(subcommand)]
     command: Option<Commands>,
@@ -18,35 +29,100 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Search for packages across all available sources and display results in an
-    /// interactive table (wraps apt search, cargo search, flatpak search, etc.)
-    #[command(alias = "find", alias = "srch")]
-    Search { query: Option<String> },
+    /// Search for a package across all installed package managers and their repositories.
+    ///
+    /// Wraps the native search commands (apt search, cargo search, flatpak search, etc.)
+    /// and displays results in an interactive table inside the TUI.
+    /// Optionally filter to one manager with -m / --manager.
+    ///
+    /// EXAMPLES
+    ///   s8n srch firefox
+    ///   s8n srch ripgrep
+    ///   s8n search -m cargo serde
+    #[command(name = "search", alias = "srch", alias = "find")]
+    Search {
+        /// Package name or keyword to search for
+        query: Option<String>,
+    },
 
-    /// Install packages (supports source:package syntax, e.g. apt:firefox)
-    #[command(alias = "install")]
-    Stall { packages: Vec<String> },
+    /// Install one or more packages via the appropriate package manager.
+    ///
+    /// Accepts plain names (uses the system default / highest-priority PM) or
+    /// source-prefixed names to target a specific manager.
+    ///
+    /// EXAMPLES
+    ///   s8n stall firefox
+    ///   s8n stall apt:vim flatpak:org.gimp.GIMP cargo:ripgrep
+    ///   s8n stall https://example.com/app.tar.gz   # URL install via soar
+    #[command(name = "stall", alias = "install")]
+    Stall {
+        /// Package(s) to install — plain names or source:name pairs
+        packages: Vec<String>,
+    },
 
-    /// Remove packages tracked by S8n (uninstalls via the appropriate package manager)
-    #[command(alias = "remove", alias = "uninstall")]
-    Burn { packages: Vec<String> },
+    /// Remove a package permanently (no recovery).
+    ///
+    /// Use `s8n brn` instead if you want to be able to recover the package later.
+    ///
+    /// EXAMPLES
+    ///   s8n burn vim
+    ///   s8n burn apt:vim flatpak:org.gimp.GIMP
+    #[command(name = "burn", alias = "remove", alias = "uninstall")]
+    Burn {
+        /// Package(s) to remove
+        packages: Vec<String>,
+    },
 
-    /// Bury (remove) S8n-tracked packages via rip2 graveyard so they can be recovered later
-    /// Supports source:package syntax, e.g. "s8n brn apt:vim" or "s8n brn firefox"
-    #[command(alias = "bury")]
-    Brn { packages: Vec<String> },
+    /// Bury (safely remove) a package into the S8n graveyard for later recovery.
+    ///
+    /// Uses rip2 under the hood. If rip2 is not installed, falls back to a plain
+    /// uninstall. Buried packages are stored in ~/.local/share/graveyard/s8n/ and
+    /// can be recovered at any time with `s8n xum`.
+    ///
+    /// EXAMPLES
+    ///   s8n brn vim
+    ///   s8n brn apt:vim cargo:ripgrep
+    #[command(name = "brn", alias = "bury")]
+    Brn {
+        /// Package(s) to bury — plain names or source:name pairs
+        packages: Vec<String>,
+    },
 
-    /// Exhume (recover) packages previously buried with `s8n brn`
-    /// Run without arguments to list the graveyard interactively
-    #[command(alias = "recover", alias = "restore")]
-    Xum { packages: Vec<String> },
+    /// Exhume (recover) packages previously buried with `s8n brn`.
+    ///
+    /// With no arguments, opens an interactive graveyard browser where you can
+    /// browse and restore any buried package. With package names as arguments,
+    /// restores those specific packages immediately.
+    ///
+    /// EXAMPLES
+    ///   s8n xum              # open interactive graveyard browser
+    ///   s8n xum vim          # recover vim directly
+    ///   s8n xum vim ripgrep  # recover multiple packages
+    #[command(name = "xum", alias = "recover", alias = "restore")]
+    Xum {
+        /// Package name(s) to recover (leave empty for interactive browser)
+        packages: Vec<String>,
+    },
 
-    /// List all installed packages system-wide from all tracked package managers
-    #[command(alias = "list", alias = "installed")]
+    /// Show all packages installed on this system across all tracked package managers.
+    ///
+    /// Lists packages from apt, flatpak, snap, cargo, brew, am, and any other
+    /// managers detected on the system, displayed in the S8n TUI.
+    ///
+    /// EXAMPLES
+    ///   s8n shw
+    ///   s8n shw -m flatpak   # limit to flatpak packages
+    #[command(name = "shw", alias = "list", alias = "installed")]
     Shw,
 
-    /// Update all system packages
-    #[command(alias = "update", alias = "upgrade")]
+    /// Update and upgrade all packages from all sources via topgrade.
+    ///
+    /// Runs topgrade, which calls each installed package manager's update/upgrade
+    /// command in sequence (apt upgrade, flatpak update, cargo install-update, etc.).
+    ///
+    /// EXAMPLES
+    ///   s8n upd8
+    #[command(name = "upd8", alias = "update", alias = "upgrade")]
     Upd8,
 }
 
@@ -84,8 +160,18 @@ fn parse_source_prefix(input: &str) -> (Option<&str>, &str) {
         let pkg = &input[colon + 1..];
         // Only treat as source prefix if source is a known PM name
         let known = [
-            "apt", "pacstall", "flatpak", "snap", "brew", "soar", "npm", "bun", "pip",
-            "cargo", "cargo-binstall", "am",
+            "apt",
+            "pacstall",
+            "flatpak",
+            "snap",
+            "brew",
+            "soar",
+            "npm",
+            "bun",
+            "pip",
+            "cargo",
+            "cargo-binstall",
+            "am",
         ];
         if known.contains(&source) && !pkg.is_empty() {
             return (Some(source), pkg);
@@ -181,7 +267,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let pm = choose_primary_manager(&available_managers, Some("soar"))?;
                         tui::run_progress_tui(pm, urls, "install").await?;
                     } else {
-                        eprintln!("URL installs require the 'soar' backend. Re-run with `--manager soar`.");
+                        eprintln!(
+                            "URL installs require the 'soar' backend. Re-run with `--manager soar`."
+                        );
                     }
                 } else if let Some(soar) = available_managers.iter().find(|m| m.name() == "soar") {
                     tui::run_progress_tui(soar.as_ref(), urls, "install").await?;
@@ -202,7 +290,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             for pkg in &packages {
                 let (source, name) = parse_source_prefix(pkg);
                 if let Some(src) = source {
-                    by_source.entry(src.to_string()).or_default().push(name.to_string());
+                    by_source
+                        .entry(src.to_string())
+                        .or_default()
+                        .push(name.to_string());
                 } else {
                     default_pkgs.push(name.to_string());
                 }
@@ -232,7 +323,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     for pkg in &packages {
                         let (source, name) = parse_source_prefix(pkg);
                         if let Some(src) = source {
-                            by_source.entry(src.to_string()).or_default().push(name.to_string());
+                            by_source
+                                .entry(src.to_string())
+                                .or_default()
+                                .push(name.to_string());
                         } else {
                             default_pkgs.push(name.to_string());
                         }
@@ -252,18 +346,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             all_pkgs_with_pm.push((pkg.clone(), pm));
                         }
                     }
-                    tui::run_burial_tui(&gyard, &available_managers, &packages, requested_manager).await?;
+                    tui::run_burial_tui(&gyard, &available_managers, &packages, requested_manager)
+                        .await?;
                 }
                 Err(_) => {
                     // rip2 not installed — fall back to plain remove with a notice
-                    eprintln!("Note: rip2 is not installed; using plain removal (no graveyard). Install with: cargo install rm-improved");
+                    eprintln!(
+                        "Note: rip2 is not installed; using plain removal (no graveyard). \
+                         Install with: cargo install rm-improved"
+                    );
                     let mut by_source: std::collections::HashMap<String, Vec<String>> =
                         std::collections::HashMap::new();
                     let mut default_pkgs = Vec::new();
                     for pkg in &packages {
                         let (source, name) = parse_source_prefix(pkg);
                         if let Some(src) = source {
-                            by_source.entry(src.to_string()).or_default().push(name.to_string());
+                            by_source
+                                .entry(src.to_string())
+                                .or_default()
+                                .push(name.to_string());
                         } else {
                             default_pkgs.push(name.to_string());
                         }
@@ -281,20 +382,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        Some(Commands::Xum { packages }) => {
-            match graveyard::GraveyardConfig::new() {
-                Ok(gyard) => {
-                    if packages.is_empty() {
-                        tui::run_graveyard_tui(&gyard, &available_managers).await?;
-                    } else {
-                        tui::run_exhume_tui(&gyard, &available_managers, &packages).await?;
-                    }
-                }
-                Err(e) => {
-                    return Err(format!("Cannot open graveyard: {}", e).into());
+        Some(Commands::Xum { packages }) => match graveyard::GraveyardConfig::new() {
+            Ok(gyard) => {
+                if packages.is_empty() {
+                    tui::run_graveyard_tui(&gyard, &available_managers).await?;
+                } else {
+                    tui::run_exhume_tui(&gyard, &available_managers, &packages).await?;
                 }
             }
-        }
+            Err(e) => {
+                return Err(format!("Cannot open graveyard: {}", e).into());
+            }
+        },
 
         Some(Commands::Shw) => {
             tui::run_installed_view_tui(available_managers).await?;
