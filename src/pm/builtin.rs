@@ -6,6 +6,51 @@ use async_trait::async_trait;
 use tokio::process::Command;
 use which::which;
 
+/// Strip ANSI escape codes and markdown formatting from package names/descriptions.
+/// Handles: \x1b[...m escape codes, **bold**, *italic*, _underline_, `code`
+fn clean_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    // First pass: strip ANSI escape sequences
+    while i < bytes.len() {
+        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            // Skip until we hit a letter (the SGR terminator)
+            i += 2;
+            while i < bytes.len() && !bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+            i += 1; // skip the terminating letter
+        } else {
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    // Second pass: strip markdown inline formatting
+    let out = out.replace("**", "").replace('*', "").replace('`', "");
+    // Collapse multiple spaces / odd unicode spacing to a single space
+    let mut result = String::with_capacity(out.len());
+    let mut prev_space = false;
+    for ch in out.chars() {
+        if ch == '\n' || ch == '\r' {
+            // Replace newlines with a space
+            if !prev_space {
+                result.push(' ');
+                prev_space = true;
+            }
+        } else if ch.is_whitespace() {
+            if !prev_space {
+                result.push(' ');
+                prev_space = true;
+            }
+        } else {
+            result.push(ch);
+            prev_space = false;
+        }
+    }
+    result.trim().to_string()
+}
+
 /// Generic structural wrapper for package managers where we just pass subcommands
 pub struct GenericWrapper {
     pub name: String,
@@ -207,7 +252,7 @@ fn parse_apt_output(output: &str, source: &str) -> Vec<PackageInfo> {
             let installed = line.contains("[installed");
 
             let description = if i + 1 < lines.len() && lines[i + 1].starts_with("  ") {
-                lines[i + 1].trim().to_string()
+                clean_text(lines[i + 1].trim())
             } else {
                 String::new()
             };
@@ -240,12 +285,12 @@ fn parse_flatpak_output(output: &str, source: &str) -> Vec<PackageInfo> {
 
             results.push(PackageInfo {
                 name: if app_id.is_empty() {
-                    display_name.to_string()
+                    clean_text(display_name)
                 } else {
-                    app_id
+                    clean_text(&app_id)
                 },
                 version,
-                description,
+                description: clean_text(&description),
                 source: source.to_string(),
                 installed: false,
             });
@@ -312,8 +357,8 @@ fn parse_npm_output(output: &str, source: &str) -> Vec<PackageInfo> {
         // npm search in table: "name  |  description  |  author  |  date  |  version  |  keywords"
         let parts: Vec<&str> = line.split('|').collect();
         if parts.len() >= 2 {
-            let name = parts[0].trim().to_string();
-            let description = parts.get(1).unwrap_or(&"").trim().to_string();
+            let name = clean_text(parts[0].trim());
+            let description = clean_text(parts.get(1).unwrap_or(&"").trim());
             let version = parts.get(4).unwrap_or(&"").trim().to_string();
             if !name.is_empty() {
                 results.push(PackageInfo {
@@ -667,7 +712,7 @@ impl PackageManager for CargoWrapper {
     }
 }
 
-/// Parse `cargo search` output: lines like `name = "version" # description`
+/// Parse `cargo search` output: lines like `name = "version"    # description`
 fn parse_cargo_search_output(output: &str) -> Vec<PackageInfo> {
     let mut results = Vec::new();
     for line in output.lines() {
@@ -681,20 +726,25 @@ fn parse_cargo_search_output(output: &str) -> Vec<PackageInfo> {
         };
         let name = t[..eq_pos].trim();
         let rest = &t[eq_pos + 4..];
-        let (version, description) = if let Some(hash_pos) = rest.find("\" # ") {
-            (&rest[..hash_pos], &rest[hash_pos + 4..])
-        } else if let Some(quote_pos) = rest.find('"') {
-            (&rest[..quote_pos], "")
+        // Find closing quote; description follows after optional whitespace + '# '
+        let (version, description) = if let Some(quote_pos) = rest.find('"') {
+            let ver = &rest[..quote_pos];
+            let after_quote = rest[quote_pos + 1..].trim_start();
+            if let Some(desc) = after_quote.strip_prefix("# ") {
+                (ver, desc.trim())
+            } else {
+                (ver, "")
+            }
         } else {
-            (rest, "")
+            (rest.trim_end_matches('"'), "")
         };
         if name.is_empty() {
             continue;
         }
         results.push(PackageInfo {
-            name: name.to_string(),
+            name: clean_text(name),
             version: version.trim().to_string(),
-            description: description.trim().to_string(),
+            description: clean_text(description),
             source: "cargo".to_string(),
             installed: false,
         });

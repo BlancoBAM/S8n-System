@@ -493,9 +493,9 @@ fn render_search_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
 
     // ── Status / help bar ──
     let help = match app.mode {
-        Mode::Input => " ↩ search • tab results • esc quit",
+        Mode::Input => " ↩ search • Tab results • Esc quit",
         Mode::Browse => {
-            " ↑↓ navigate • ←→ source/page • tab filter • i install • d remove • v installed • / search • q quit"
+            " ↑↓ navigate • ←→ source/page • Tab filter • Enter install • i info • d remove • v installed • / search • q quit"
         }
         _ => " q quit",
     };
@@ -947,7 +947,7 @@ fn render_installed_view(f: &mut ratatui::Frame, app: &mut App, area: Rect) {
         Span::styled(" INSTALLED ", theme::status_bar()),
         Span::styled(" ", Style::default()),
         Span::styled(
-            " ↑↓ navigate • i install • d remove • ctrl+i info • / filter • Ctrl+F fuzzy • q back",
+            " ↑↓ navigate • Enter/i info • d remove • / filter • q back",
             theme::status_text(),
         ),
     ]);
@@ -1048,7 +1048,10 @@ fn handle_input_key(app: &mut App, key: KeyCode, _modifiers: KeyModifiers) -> Op
 }
 
 fn handle_browse_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
-    if modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('i') {
+    // i or Ctrl+I → show package detail panel
+    if (modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('i'))
+        || (!modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('i'))
+    {
         if let Some(pkg) = app.selected_package() {
             app.detail_package = Some(pkg.clone());
             app.mode = Mode::PackageDetail;
@@ -1130,7 +1133,7 @@ fn handle_browse_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Op
             });
             app.update_source_options();
         }
-        KeyCode::Char('i') | KeyCode::Enter => {
+        KeyCode::Enter => {
             if let Some(pkg) = app.selected_package() {
                 if pkg.installed {
                     app.status_message = format!("{} is already installed", pkg.name);
@@ -1261,7 +1264,10 @@ fn handle_confirm_key(app: &mut App, key: KeyCode) -> Option<Action> {
 }
 
 fn handle_installed_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) -> Option<Action> {
-    if modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('i') {
+    // i or Ctrl+I → show package detail panel
+    if (modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('i'))
+        || (!modifiers.contains(KeyModifiers::CONTROL) && key == KeyCode::Char('i'))
+    {
         let filter = app.search_input.to_lowercase();
         let filtered: Vec<&PackageInfo> = app
             .installed_results
@@ -1327,8 +1333,8 @@ fn handle_installed_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) ->
                 }
             }
         }
+        // Enter or i → show package detail (packages here are already installed)
         KeyCode::Char('i') | KeyCode::Enter => {
-            // Install from installed list - find selected package
             let filter = app.search_input.to_lowercase();
             let filtered: Vec<&PackageInfo> = app
                 .installed_results
@@ -1342,9 +1348,8 @@ fn handle_installed_key(app: &mut App, key: KeyCode, modifiers: KeyModifiers) ->
             if let Some(sel) = app.list_state.selected() {
                 let global_idx = app.page * app.page_size + sel;
                 if let Some(pkg) = filtered.get(global_idx) {
-                    // Check if already installed (it is, since this is the installed view)
-                    // Show a popup informing the user
-                    app.status_message = format!("{} is already installed", pkg.name);
+                    app.detail_package = Some((*pkg).clone());
+                    app.mode = Mode::PackageDetail;
                 }
             }
         }
@@ -1573,7 +1578,7 @@ fn render_package_detail(f: &mut ratatui::Frame, app: &App, area: Rect) {
 
     f.render_widget(
         Paragraph::new(Span::styled(
-            " i install  •  d remove  •  Esc back",
+            " Enter/i install  •  d remove  •  Esc back",
             theme::status_text(),
         )),
         chunks[2],
