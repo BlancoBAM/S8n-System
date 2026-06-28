@@ -39,7 +39,7 @@ enum Commands {
     ///   s8n srch firefox
     ///   s8n srch ripgrep
     ///   s8n search -m cargo serde
-    #[command(name = "search", alias = "srch", alias = "find")]
+    #[command(name = "srch", alias = "search", alias = "find")]
     Search {
         /// Package name or keyword to search for
         query: Option<String>,
