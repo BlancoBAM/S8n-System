@@ -752,6 +752,12 @@ impl AmWrapper {
     }
 }
 
+impl Default for AmWrapper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl PackageManager for AmWrapper {
     fn name(&self) -> &str {

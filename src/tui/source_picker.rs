@@ -148,7 +148,7 @@ async fn picker_loop(
             if let Ok(Event::Key(key)) = event::read() {
                 match key.code {
                     KeyCode::Up => {
-                        if selected > 0 { selected -= 1; }
+                        selected = selected.saturating_sub(1);
                     }
                     KeyCode::Down => {
                         if selected + 1 < candidates.len() { selected += 1; }

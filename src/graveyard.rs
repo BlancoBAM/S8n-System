@@ -150,7 +150,7 @@ impl GraveyardConfig {
         }
         Self::walk_dir(&self.s8n_dir, &self.s8n_dir, &mut entries);
         // Sort by modification time (newest first)
-        entries.sort_by(|a, b| b.modified.cmp(&a.modified));
+        entries.sort_by_key(|e| std::cmp::Reverse(e.modified));
         entries
     }
 

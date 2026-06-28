@@ -2378,32 +2378,27 @@ pub async fn run_installed_view_tui(managers: Vec<Box<dyn PackageManager>>) -> i
         }
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key_event) = event::read()? {
-                if let Some(action) = handle_key(&mut app, key_event.code, key_event.modifiers) {
-                    match action {
-                        Action::Remove(pkgs, source) => {
-                            let pm = managers
-                                .iter()
-                                .find(|m| m.name() == source)
-                                .or_else(|| managers.first());
-                            if let Some(pm) = pm {
-                                app.mode = Mode::Progress;
-                                app.progress_items = pkgs
-                                    .iter()
-                                    .map(|p| ProgressItem { name: p.clone(), done: false, success: false })
-                                    .collect();
-                                render(&mut terminal, &mut app)?;
-                                for (i, pkg) in pkgs.iter().enumerate() {
-                                    let result = pm.remove(std::slice::from_ref(pkg)).await;
-                                    if let Some(item) = app.progress_items.get_mut(i) {
-                                        item.done = true;
-                                        item.success = matches!(result, PmResult::Success);
-                                    }
-                                    render(&mut terminal, &mut app)?;
-                                }
-                                app.mode = Mode::Done;
+                if let Some(Action::Remove(pkgs, source)) = handle_key(&mut app, key_event.code, key_event.modifiers) {
+                    let pm = managers
+                        .iter()
+                        .find(|m| m.name() == source)
+                        .or_else(|| managers.first());
+                    if let Some(pm) = pm {
+                        app.mode = Mode::Progress;
+                        app.progress_items = pkgs
+                            .iter()
+                            .map(|p| ProgressItem { name: p.clone(), done: false, success: false })
+                            .collect();
+                        render(&mut terminal, &mut app)?;
+                        for (i, pkg) in pkgs.iter().enumerate() {
+                            let result = pm.remove(std::slice::from_ref(pkg)).await;
+                            if let Some(item) = app.progress_items.get_mut(i) {
+                                item.done = true;
+                                item.success = matches!(result, PmResult::Success);
                             }
+                            render(&mut terminal, &mut app)?;
                         }
-                        _ => {}
+                        app.mode = Mode::Done;
                     }
                 }
             }
@@ -2551,7 +2546,7 @@ pub async fn run_exhume_tui(
             tokio::time::sleep(Duration::from_millis(80)).await;
         }
 
-        let result = graveyard.exhume(Some(&[pkg.clone()])).await;
+        let result = graveyard.exhume(Some(std::slice::from_ref(pkg))).await;
         let msg = match result {
             Ok(()) => {
                 // Try to re-install if a suitable PM exists
@@ -2560,7 +2555,7 @@ pub async fn run_exhume_tui(
                     .find(|m| matches!(m.name(), "apt" | "pacstall" | "brew"))
                     .or_else(|| managers.first());
                 if let Some(pm) = pm_opt {
-                    match pm.install(&[pkg.clone()]).await {
+                    match pm.install(std::slice::from_ref(pkg)).await {
                         PmResult::Success => format!("reinstalled via {}", pm.name()),
                         _ => "files recovered from graveyard".to_string(),
                     }
@@ -2632,7 +2627,7 @@ pub async fn run_graveyard_tui(
                             tokio::time::sleep(Duration::from_millis(80)).await;
                         }
 
-                        let result = graveyard.exhume(Some(&[pkg_name.clone()])).await;
+                        let result = graveyard.exhume(Some(std::slice::from_ref(&pkg_name))).await;
                         let msg = match result {
                             Ok(()) => {
                                 let pm_opt = managers
@@ -2640,7 +2635,7 @@ pub async fn run_graveyard_tui(
                                     .find(|m| matches!(m.name(), "apt" | "pacstall" | "brew"))
                                     .or_else(|| managers.first());
                                 if let Some(pm) = pm_opt {
-                                    match pm.install(&[pkg_name.clone()]).await {
+                                    match pm.install(std::slice::from_ref(&pkg_name)).await {
                                         PmResult::Success => format!("reinstalled via {}", pm.name()),
                                         _ => "recovered from graveyard".to_string(),
                                     }
