@@ -2776,13 +2776,13 @@ fn relevance_score(pkg: &PackageInfo, query: &str) -> u32 {
                 || haystack
                     .as_bytes()
                     .get(pos - 1)
-                    .map_or(true, |&b| matches!(b, b'-' | b'_' | b'/' | b'@'));
+                    .is_none_or(|&b| matches!(b, b'-' | b'_' | b'/' | b'@'));
             let after_pos = pos + needle.len();
             let after_ok = after_pos >= haystack.len()
                 || haystack
                     .as_bytes()
                     .get(after_pos)
-                    .map_or(true, |&b| matches!(b, b'-' | b'_' | b'/' | b'@'));
+                    .is_none_or(|&b| matches!(b, b'-' | b'_' | b'/' | b'@'));
             before_ok && after_ok
         } else {
             false

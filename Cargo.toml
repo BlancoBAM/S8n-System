@@ -1,8 +1,8 @@
 [package]
 name = "s8n"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
-description = "A beautiful unified system manager, package manager, and file manager TUI — built for Lilith Linux and Katie"
+description = "Unified package & file manager TUI with color themes, fuzzy search, and multi-PM support"
 authors = ["BlancoBAM", "Lilith"]
 repository = "https://github.com/BlancoBAM/S8n-System"
 license = "GPL-3.0"

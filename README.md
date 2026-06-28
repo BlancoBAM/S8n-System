@@ -1,12 +1,14 @@
 # S8n System Manager
 
-
 [![CI](https://github.com/BlancoBAM/S8n-System/actions/workflows/ci.yml/badge.svg)](https://github.com/BlancoBAM/S8n-System/actions/workflows/ci.yml)
 [![Release](https://github.com/BlancoBAM/S8n-System/actions/workflows/release.yml/badge.svg)](https://github.com/BlancoBAM/S8n-System/actions/workflows/release.yml)
 [![Crates.io](https://img.shields.io/crates/v/s8n.svg)](https://crates.io/crates/s8n)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 
-S8n is a fast, visually stunning System Manager, Unified Package Manager, and File Manager built in Rust. It provides native terminal gradients, Miller-column file browsing, and cross-package-manager fuzzy search — all from a single, beautiful terminal interface. It is designed specifically for Lilith Linux, but I use it locally and it SHOULD work on any Debian based system, though tbh I haven't tested outside of an Ubuntu 26.04 Resolute base.
+**S8n** is a fast, visually stunning System Manager, Unified Package Manager, and File Manager built in Rust.  
+It provides native terminal color themes, Miller-column file browsing, a graveyard for safe file deletion and recovery, and cross-package-manager search with relevance-ranked results — all from one beautiful terminal interface.
+
+Designed for **Lilith Linux**, though it works on any Debian-based system.
 
 ![S8n Showcase](screenshots/Screenshot_2026-04-01_23-16-30.png)
 
@@ -16,11 +18,14 @@ S8n is a fast, visually stunning System Manager, Unified Package Manager, and Fi
 
 - [Features](#features)
 - [Quick Start](#quick-start)
+- [CLI Reference](#cli-reference)
 - [Installation](#installation)
 - [Usage Guide](#usage-guide)
   - [Main Menu](#main-menu)
-  - [Package Manager](#package-manager)
-  - [Installed Packages](#installed-packages)
+  - [Package Manager — Search & Browse](#package-manager--search--browse)
+  - [Package Detail Panel](#package-detail-panel)
+  - [Installed Packages View](#installed-packages-view)
+  - [Graveyard (Safe Delete & Recovery)](#graveyard-safe-delete--recovery)
   - [File Manager](#file-manager)
   - [Theme Picker](#theme-picker)
 - [Keyboard Reference](#keyboard-reference)
@@ -35,12 +40,16 @@ S8n is a fast, visually stunning System Manager, Unified Package Manager, and Fi
 
 ## Features
 
-- **Unified Package Manager** — Search, install, and remove packages across 10+ package managers from a single interface (apt, flatpak, snap, brew, npm, pip, and more)
-- **Installed Packages View** — See all system-wide installed packages at a glance, sorted alphabetically, with filtering and fuzzy search
+- **Unified Package Manager** — Search, install, and remove packages across 10+ package managers from a single TUI (apt, flatpak, snap, brew, npm, pip, cargo, pacstall, soar, am, and more)
+- **Relevance-Ranked Results** — Search results are automatically sorted by match quality: exact matches first, then prefix matches, then partial matches, then description matches
+- **Clean Descriptions** — ANSI codes, markdown formatting, and unicode artifacts are stripped from all package names and descriptions before display
+- **Installed Status Tracking** — Packages are cross-referenced against every PM's installed list; installed packages are highlighted regardless of how they were installed
+- **Package Detail Panel** — Press `i` on any search result to view full metadata before committing to an install
+- **Installed Packages View** — See all system-wide installed packages at a glance, sorted alphabetically, with filtering
 - **Animated Progress Displays** — Theme-aware gradient progress bars and braille spinners during install/remove operations
-- **Miller-Column File Manager** — Safe directory traversal with drill-down exploration, file editing (`$EDITOR`), moves, renames, and deletions
+- **Miller-Column File Manager** — Safe directory traversal with drill-down exploration, file editing (`$EDITOR`), moves, renames, and deletions via rip2 graveyard
+- **Graveyard (Safe Deletion)** — Files and packages deleted via s8n are buried in a rip2 graveyard (`~/.local/share/graveyard/s8n/`) and can be recovered with `s8n xum`
 - **Dynamic Theming Engine** — Switch the aesthetic of the entire application live with 5 built-in themes: Fire, Ocean, Sunset, Forest, and Purple Dream
-- **Fuzzy Search** — Integration with [skim](https://github.com/skim-rs/skim) (`sk`) for fast fuzzy filtering of packages
 - **Keyboard-Native** — Vim-style navigation (`j/k/h/l`) alongside arrow keys, designed for efficiency
 
 ---
@@ -48,14 +57,46 @@ S8n is a fast, visually stunning System Manager, Unified Package Manager, and Fi
 ## Quick Start
 
 ```bash
-# Install (if binary is available)
-s8n
+# Install via cargo
+cargo install s8n
 
-# Or run directly
-~/.local/bin/s8n
+# Or download a pre-built binary (see Installation)
+s8n
 ```
 
 Navigate the main menu with arrow keys or `j/k`. Press `Enter` to select a mode. Press `q` or `Esc` to go back or quit.
+
+---
+
+## CLI Reference
+
+S8n exposes a full CLI for scripted and non-TUI use:
+
+```
+s8n [COMMAND]
+```
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `s8n` | — | Launch the full TUI |
+| `s8n srch <pkg>` | `search`, `find` | Search for a package across all sources |
+| `s8n stall <pkg>` | `install`, `add` | Install the specified package |
+| `s8n brn <pkg>` | `burn`, `remove`, `rm` | Remove (bury) the specified package |
+| `s8n xum [pkg]` | `exhume`, `recover` | Recover a buried package from the graveyard |
+| `s8n shw` | `show`, `list` | List all installed packages from all sources |
+| `s8n upd8` | `update`, `upgrade` | Update all packages via topgrade |
+| `s8n -h` / `s8n --help` | — | Show this help screen |
+
+**Examples:**
+
+```bash
+s8n srch neovim          # Search for neovim across all package managers
+s8n stall neovim         # Install neovim
+s8n brn neovim           # Remove neovim (buried safely in the graveyard)
+s8n xum neovim           # Recover neovim from the graveyard
+s8n shw                  # List all installed packages
+s8n upd8                 # Run topgrade to update everything
+```
 
 ---
 
@@ -84,12 +125,11 @@ sudo dpkg -i s8n_*.deb
 cargo install s8n
 ```
 
-> **Note:** `cargo install` places the binary in `~/.cargo/bin/s8n` — **not** in your current directory.
+> **Note:** `cargo install` places the binary in `~/.cargo/bin/s8n`.  
 > Ensure `~/.cargo/bin` is in your PATH:
 > ```bash
 > echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 > ```
-> Then run `s8n` directly.
 
 ### From Source
 
@@ -102,8 +142,9 @@ cp target/release/s8n ~/.local/bin/s8n
 
 ### Prerequisites
 
-- **Rust toolchain** (for building from source): `rustc` and `cargo`
-- **skim** (optional, for fuzzy search): Install `sk` and ensure it's in your `PATH`
+- **Rust toolchain** (for building): `rustc` and `cargo`
+- **rip2** (for graveyard/safe delete): `cargo install rm-improved`
+- **topgrade** (for `s8n upd8`): [github.com/topgrade-rs/topgrade](https://github.com/topgrade-rs/topgrade)
 
 ---
 
@@ -111,7 +152,7 @@ cp target/release/s8n ~/.local/bin/s8n
 
 ### Main Menu
 
-Launch with `s8n` to see the main menu with three options:
+Launch with `s8n` to see the main menu:
 
 ![S8n TUI Main Menu](screenshots/Screenshot_2026-04-01_23-16-02.png)
 
@@ -121,38 +162,64 @@ Launch with `s8n` to see the main menu with three options:
 | **File Manager** | Browse and manage files with Miller-column navigation |
 | **Color Theme** | Preview and select a visual theme for the application |
 
-### Package Manager
+### Package Manager — Search & Browse
 
-The package manager is the core feature. Upon entering, you'll see a search prompt.
+The package manager is the core feature. Enter a search term to query all available package managers simultaneously.
 
 ![S8n Package Search & Browse](screenshots/Screenshot_2026-04-01_23-16-30.png)
 
-**Basic workflow:**
+**Workflow:**
 
-1. **Search** — Type a package name and press `Enter` to search across all available package managers
-2. **Browse** — Use `↑/↓` or `j/k` to navigate results. Use `←/→` or `h/l` to switch between sources or pages
-3. **Install** — Select a package and press `i` or `Enter` to install. Confirm with the dialog
-4. **Remove** — Select a package and press `d` or `r` to remove it
-5. **Filter** — Press `/` to re-enter search mode and refine results
+1. **Search** — Type a package name and press `Enter`. Results are fetched from all installed PMs concurrently.
+2. **Browse** — Use `↑/↓` to navigate. Results are **ranked by relevance** — exact name matches appear first.
+3. **Install** — Press `Enter` on a highlighted package to open the install confirmation dialog.
+4. **Info** — Press `i` to open the Package Detail panel and view full metadata before installing.
+5. **Switch source** — Use `←/→` to switch between package sources or paginate results.
+6. **Filter by PM** — Press `Tab` to cycle through package manager tabs.
+7. **Remove** — Press `d` or `r` to remove a package.
 
-**Source tabs:** When a package is available from multiple sources, tabs appear at the top showing each source. Use `←/→` to switch between them.
+**Source tabs:** When a package is available from multiple sources, tabs appear at the top showing each source. Use `←/→` to switch.
 
 ![S8n Search Pagination](screenshots/Screenshot_2026-04-01_23-18-33.png)
 
-### Installed Packages
+### Package Detail Panel
+
+Press `i` on any search result to open the detail panel:
+
+- Shows full name, version, source, and description
+- Press `Enter` or `i` again to install from this panel
+- Press `d` to remove (if already installed)
+- Press `Esc` to go back
+
+### Installed Packages View
 
 Press `v` at any time in the package manager to view **all installed packages** system-wide:
 
 ![S8n Installed Packages View](screenshots/Screenshot_2026-04-01_23-18-49.png)
 
-- Packages are collected from all available package managers
+- Packages collected from all available package managers
 - Sorted alphabetically for easy browsing
-- Press `/` to filter the list by name, source, or version
-- Press `Ctrl+F` for fuzzy search with skim
-- Press `d` or `r` on any package to remove it
-- Press `q` or `Esc` to return to search/browse mode
+- Press `/` to filter by name or source
+- Press `Enter` or `i` to open the detail panel for the selected package
+- Press `d` or `r` to remove a package
+- Press `q` or `Esc` to return to browse mode
 
-Installed packages in search results are marked with a **✓** indicator and displayed in the theme's accent color.
+### Graveyard (Safe Delete & Recovery)
+
+S8n uses [rip2](https://github.com/MilesCranmer/rip2) for all file and package removals. Instead of permanent deletion, files are **buried** in a graveyard at:
+
+```
+~/.local/share/graveyard/s8n/
+```
+
+To recover a buried file or package:
+
+```bash
+s8n xum              # Interactive recovery (choose from graveyard)
+s8n xum <pkg-name>   # Recover a specific item by name
+```
+
+You can also navigate into the graveyard inside the TUI.
 
 ### File Manager
 
@@ -160,13 +227,13 @@ The Miller-column file manager lets you browse directories safely:
 
 ![S8n File Manager with Miller Columns](screenshots/Screenshot_2026-04-01_23-17-24.png)
 
-- **Navigate** — Use arrow keys or `j/k` to move through files
-- **Drill down** — Press `Enter` or `l` to enter a directory
-- **Go back** — Press `h` or `Backspace` to go up a level
-- **Edit** — Press `e` to open a file in `$EDITOR`
-- **Rename** — Press `r` to rename a file
-- **Delete** — Press `d` to delete a file (with confirmation)
-- **Move** — Press `m` to move a file to another location
+- **Navigate** — Arrow keys or `j/k`
+- **Drill down** — `Enter` or `l` to enter a directory
+- **Go back** — `h` or `Backspace` to go up
+- **Edit** — `e` to open in `$EDITOR`
+- **Rename** — `r` to rename
+- **Delete** — `d` to bury in graveyard (recoverable with `s8n xum`)
+- **Move** — `m` to move to another location
 
 ### Theme Picker
 
@@ -184,9 +251,9 @@ Access the theme picker from the main menu or by pressing `t` in the package man
 |-------|-------------|
 | **Fire** | Warm oranges and reds — the default Lilith Linux aesthetic |
 | **Ocean** | Cool blues and cyans for a calm, deep-sea feel |
-| **Sunset** | Rich warm gradients reminiscent of a golden hour |
+| **Sunset** | Rich warm gradients reminiscent of golden hour |
 | **Forest** | Natural greens and earth tones |
-| **Purple Dream** | Vibrant purples and pinks — the original lipgloss vibe |
+| **Purple Dream** | Vibrant purples and pinks |
 
 ---
 
@@ -205,22 +272,29 @@ Access the theme picker from the main menu or by pressing `t` in the package man
 
 | Key | Action |
 |-----|--------|
-| `i` / `Enter` | Install selected package |
+| `Enter` | Install selected package (opens confirmation) |
+| `i` | Open Package Detail panel (info) |
 | `d` / `r` | Remove selected package |
-| `/` | Search / filter |
+| `/` | Open search input |
 | `v` | View all installed packages |
-| `Ctrl+F` | Fuzzy search with skim |
-| `←` / `h` | Previous source or page |
-| `→` / `l` | Next source or page |
-| `Tab` | Switch tab / filter mode |
+| `←` / `→` | Switch source tab or page |
+| `Tab` | Cycle package manager filter tab |
+
+### Package Detail Panel
+
+| Key | Action |
+|-----|--------|
+| `Enter` / `i` | Install the package |
+| `d` | Remove the package |
+| `Esc` | Go back to browse |
 
 ### Installed Packages View
 
 | Key | Action |
 |-----|--------|
+| `Enter` / `i` | Open detail panel |
 | `d` / `r` | Remove selected package |
 | `/` | Filter installed packages |
-| `Ctrl+F` | Fuzzy search with skim |
 | `q` / `Esc` | Return to browse mode |
 
 ### File Manager
@@ -228,29 +302,34 @@ Access the theme picker from the main menu or by pressing `t` in the package man
 | Key | Action |
 |-----|--------|
 | `Enter` / `l` | Enter directory |
-| `h` / `Backspace` | Go up |
+| `h` / `Backspace` | Go up one level |
 | `e` | Edit file in `$EDITOR` |
 | `r` | Rename file |
-| `d` | Delete file |
+| `d` | Delete (bury in graveyard) |
 | `m` | Move file |
 
 ---
 
 ## Supported Package Managers
 
-S8n automatically detects which package managers are available on your system:
+S8n automatically detects which package managers are installed on your system. Only available managers are shown in the TUI.
 
 | Manager | Binary | Search | Install | Remove | List Installed |
-|---------|--------|--------|---------|--------|----------------|
+|---------|--------|:------:|:-------:|:------:|:--------------:|
 | **apt** | `apt` | ✓ | ✓ | ✓ | ✓ |
 | **flatpak** | `flatpak` | ✓ | ✓ | ✓ | ✓ |
 | **snap** | `snap` | ✓ | ✓ | ✓ | ✓ |
 | **brew** | `brew` | ✓ | ✓ | ✓ | ✓ |
 | **npm** | `npm` | ✓ | ✓ | ✓ | ✓ |
-| **pip** | `pip` | ✓ | ✓ | ✓ | ✓ |
+| **pip** | `pip` / `pip3` | ✓ | ✓ | ✓ | ✓ |
+| **cargo** | `cargo` | ✓ | ✓ | ✓ | ✓ |
 | **pacstall** | `pacstall` | ✓ | ✓ | ✓ | ✓ |
 | **soar** | `soar` | ✓ | ✓ | ✓ | ✓ |
+| **am** | `am` | ✓ | ✓ | ✓ | ✓ |
+| **bun** | `bun` | — | ✓ | ✓ | ✓ |
+| **topgrade** | `topgrade` | — | — | — | — (update-all) |
 
+> All managers are **auto-detected** at startup. If a binary isn't in your `PATH`, that manager is silently skipped.
 
 ---
 
@@ -283,10 +362,10 @@ You can edit this file manually, or use the built-in theme picker.
 ### Build
 
 ```bash
-# Debug build (faster compilation, larger binary)
+# Debug build
 cargo build
 
-# Release build (optimized, smaller binary)
+# Release build (optimized)
 cargo build --release
 ```
 
@@ -299,7 +378,7 @@ cargo test
 ### Lint
 
 ```bash
-cargo clippy
+cargo clippy -- -D warnings
 cargo fmt -- --check
 ```
 
@@ -319,13 +398,16 @@ All contributions should follow the project's code style and pass `cargo clippy`
 
 ## Inspirations & Credits
 
-The user interface and aesthetics for S8n were heavily inspired by the incredible ecosystem of [Charmbracelet Labs](https://charm.sh/).
+The user interface and aesthetics for S8n were inspired by the incredible ecosystem of [Charmbracelet Labs](https://charm.sh/) and several outstanding Rust TUI projects.
 
-Special thanks to the following Rust libraries and their authors:
+Special thanks to the following projects and their authors:
 
-- [ratatui](https://github.com/ratatui-org/ratatui) — Sleek terminal UIs in Rust
-- [bubbletea-rs](https://github.com/whit3rabbit/bubbletea-rs) by @whit3rabbit — Reference for smooth TUI package manager experiences and gradient progress bars
+- [joshuto](https://github.com/kamiyaa/joshuto) by [@kamiyaa](https://github.com/kamiyaa) — Miller-column file manager in Rust; a key inspiration for S8n's file manager layout and navigation feel
+- [ratatui](https://github.com/ratatui-org/ratatui) — The Rust terminal UI framework powering S8n's entire interface
+- [bubbletea-rs](https://github.com/whit3rabbit/bubbletea-rs) by @whit3rabbit — Reference for smooth TUI architecture and gradient progress bars
 - [lipgloss-rs](https://github.com/whit3rabbit/lipgloss-rs) by @whit3rabbit — Gradient generation and heat-mapping, shaping S8n's Fire aesthetic
+- [rip2 / rm-improved](https://github.com/MilesCranmer/rip2) by @MilesCranmer — Safe file deletion with graveyard recovery, powering `s8n brn` and `s8n xum`
+- [topgrade](https://github.com/topgrade-rs/topgrade) — Universal system updater, powering `s8n upd8`
 
 ---
 
@@ -333,7 +415,4 @@ Special thanks to the following Rust libraries and their authors:
 
 This software is released under the [GNU General Public License v3.0](LICENSE).
 
-**Built specifically for Lilith Linux. Beauty meets power. Evil meets elegance.**
-
-
-
+**Beauty meets power. Evil meets elegance.**
