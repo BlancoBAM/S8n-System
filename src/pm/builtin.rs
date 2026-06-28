@@ -7,23 +7,46 @@ use tokio::process::Command;
 use which::which;
 
 /// Strip ANSI escape codes and markdown formatting from package names/descriptions.
-/// Handles: \x1b[...m escape codes, **bold**, *italic*, `code`, [link](url),
-/// unicode ellipsis, UTF-8 replacement characters, npm column separator artifacts.
+/// Handles: \x1b[...m escape codes, bare [N;Nm codes (without ESC, e.g. pacstall),
+/// **bold**, *italic*, `code`, [link](url), unicode ellipsis, UTF-8 replacement chars.
+///
+/// IMPORTANT: all processing is at the char level (not byte level) so UTF-8 is preserved.
 fn clean_text(s: &str) -> String {
-    // 1. Strip ANSI escape sequences (\x1b[...m)
+    // 1. Strip ANSI CSI sequences: both \x1b[...X and bare [digits/semicolons X patterns.
+    //    Work char-by-char to keep UTF-8 valid.
     let mut ansi_stripped = String::with_capacity(s.len());
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
-            i += 2;
-            while i < bytes.len() && !bytes[i].is_ascii_alphabetic() {
-                i += 1;
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' {
+            // ESC-based CSI: \x1b[ ... alpha
+            if chars.peek() == Some(&'[') {
+                chars.next(); // consume '['
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
             }
-            i += 1;
+            // ESC without '[': skip just the ESC, keep what follows
+        } else if ch == '[' {
+            // Possible bare ANSI without ESC: check if what follows looks like `N;Nm` or `Nm`
+            // i.e. optional digits/semicolons followed immediately by an ASCII letter
+            let rest: String = chars.clone().take(16).collect();
+            let sgr_end = rest
+                .find(|c: char| c.is_ascii_alphabetic())
+                .filter(|&end| rest[..end].chars().all(|c| c.is_ascii_digit() || c == ';'));
+            if let Some(end) = sgr_end {
+                // Consume the digits/semicolons + terminating letter from the peekable iterator
+                let consume_count = end + 1; // +1 for the letter
+                for _ in 0..consume_count {
+                    chars.next();
+                }
+                // Don't emit the '['
+            } else {
+                ansi_stripped.push(ch);
+            }
         } else {
-            ansi_stripped.push(bytes[i] as char);
-            i += 1;
+            ansi_stripped.push(ch);
         }
     }
 
@@ -32,7 +55,6 @@ fn clean_text(s: &str) -> String {
     let mut chars = ansi_stripped.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '[' {
-            // Collect display text up to ]
             let mut display = String::new();
             let mut found_close = false;
             for c in chars.by_ref() {
@@ -42,61 +64,44 @@ fn clean_text(s: &str) -> String {
                 }
                 display.push(c);
             }
-            if found_close {
-                // Check for (url) immediately following
-                if chars.peek() == Some(&'(') {
-                    chars.next(); // consume '('
-                                  // Skip until ')'
-                    for c in chars.by_ref() {
-                        if c == ')' {
-                            break;
-                        }
+            if found_close && chars.peek() == Some(&'(') {
+                chars.next(); // consume '('
+                for c in chars.by_ref() {
+                    if c == ')' {
+                        break;
                     }
-                    no_links.push_str(&display);
-                } else {
-                    // Not a link, restore brackets
-                    no_links.push('[');
-                    no_links.push_str(&display);
-                    no_links.push(']');
                 }
+                no_links.push_str(&display);
             } else {
                 no_links.push('[');
                 no_links.push_str(&display);
+                if found_close {
+                    no_links.push(']');
+                }
             }
         } else {
             no_links.push(ch);
         }
     }
 
-    // 3. Strip remaining markdown inline formatting
+    // 3. Strip markdown inline formatting
     let no_md = no_links.replace("**", "").replace('`', "");
-    // Strip lone * only when used as italic marker (surrounded by word chars or space)
-    // Simple approach: remove * that are not part of a word
     let no_md: String = no_md.chars().filter(|&c| c != '*').collect();
 
-    // 4. Replace unicode ellipsis (U+2026) with plain "..."
+    // 4. Replace unicode ellipsis U+2026 → "..."
     let no_md = no_md.replace('\u{2026}', "...");
 
-    // 5. Remove UTF-8 replacement characters (U+FFFD) and the sequences that
-    //    display as ī¿½ (multi-byte replacement chars from latin1/cp1252 mishaps)
-    let no_md: String = no_md
-        .chars()
-        .filter(|&c| c != '\u{FFFD}' && c != '\u{012B}' && c != '\u{00BF}')
-        .collect();
+    // 5. Remove UTF-8 replacement char U+FFFD
+    let no_md: String = no_md.chars().filter(|&c| c != '\u{FFFD}').collect();
 
-    // 6. Strip trailing npm column separator artifacts (lone '|' at end)
+    // 6. Strip trailing npm column separator '|' artifacts
     let no_md = no_md.trim_end_matches('|').trim();
 
-    // 7. Collapse multiple/unusual whitespace to a single space
+    // 7. Collapse whitespace (including unusual unicode spaces) to single space
     let mut result = String::with_capacity(no_md.len());
     let mut prev_space = false;
     for ch in no_md.chars() {
-        if ch == '\n' || ch == '\r' || ch == '\t' {
-            if !prev_space {
-                result.push(' ');
-                prev_space = true;
-            }
-        } else if ch.is_whitespace() {
+        if ch.is_whitespace() {
             if !prev_space {
                 result.push(' ');
                 prev_space = true;
@@ -476,16 +481,18 @@ fn parse_pip_output(output: &str, source: &str) -> Vec<PackageInfo> {
 fn parse_pacstall_output(output: &str, source: &str) -> Vec<PackageInfo> {
     output
         .lines()
-        .filter(|l| !l.trim().is_empty() && !l.starts_with('['))
+        .filter(|l| {
+            let t = clean_text(l.trim());
+            !t.is_empty() && !t.starts_with('[')
+        })
         .map(|l| {
-            let trimmed = l.trim();
+            let trimmed = clean_text(l.trim());
             // Format: "pkgname @ version" — @ is the installed marker separator in pacstall
             let (name, version, installed) = if let Some(at_pos) = trimmed.find(" @ ") {
                 let name = trimmed[..at_pos].trim().to_string();
                 let ver = trimmed[at_pos + 3..].trim().to_string();
                 (name, ver, true)
             } else {
-                // Just a package name with no version info
                 let parts: Vec<&str> = trimmed.splitn(2, char::is_whitespace).collect();
                 let name = parts[0].to_string();
                 let ver = parts

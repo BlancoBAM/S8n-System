@@ -73,6 +73,8 @@ pub async fn run_command_interactive(cmd: &mut Command) -> PmResult {
 
 /// Helper function to run a command and capture its stdout
 pub async fn run_command_captured(cmd: &mut Command) -> Result<String, String> {
+    // Ask programs to suppress color output via standard env vars
+    cmd.env("NO_COLOR", "1").env("TERM", "dumb");
     match cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

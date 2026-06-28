@@ -2848,11 +2848,41 @@ async fn search_all(
         }
     }
 
+    // Cross-reference search results with installed packages so the TUI
+    // shows the correct "Installed" status for each result.
+    // We do this per PM using their list_installed() — cheap because most
+    // PMs cache or return quickly, and we only do it once per search.
+    let mut installed_names: std::collections::HashMap<String, std::collections::HashSet<String>> =
+        std::collections::HashMap::new();
+    for pm in managers {
+        if pm.is_available() {
+            if let Ok(inst) = pm.list_installed().await {
+                let names: std::collections::HashSet<String> =
+                    inst.into_iter().map(|p| p.name.to_lowercase()).collect();
+                installed_names.insert(pm.name().to_string(), names);
+            }
+        }
+    }
+    // Merge all installed names into a single set for cross-PM detection
+    let all_installed: std::collections::HashSet<&str> = installed_names
+        .values()
+        .flat_map(|s| s.iter().map(|n| n.as_str()))
+        .collect();
+
     // Sort each PM's results by relevance to the query, then alphabetically
     let primary_term = terms.first().copied().unwrap_or(query);
     let mut final_results: Vec<(String, Vec<PackageInfo>)> = results
         .into_iter()
         .map(|(pm_name, mut pkgs)| {
+            let pm_installed = installed_names.get(&pm_name);
+            for pkg in &mut pkgs {
+                let lower = pkg.name.to_lowercase();
+                // Mark installed if found in this PM's list OR any other PM
+                pkg.installed = pm_installed
+                    .map(|s| s.contains(lower.as_str()))
+                    .unwrap_or(false)
+                    || all_installed.contains(lower.as_str());
+            }
             // Deduplicate by name within the same PM
             pkgs.dedup_by(|a, b| a.name == b.name);
             // Sort: higher relevance score first; ties broken alphabetically
