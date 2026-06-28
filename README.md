@@ -10,6 +10,14 @@ It provides native terminal color themes, Miller-column file browsing, a graveya
 
 Designed for **Lilith Linux**, though it works on any Debian-based system.
 
+### Demo
+
+<video src="screenshots/s8n-2x.mp4" controls autoplay loop muted width="100%">
+  <a href="https://mega.nz/file/mYdl3ZxJ#YwBsKbAVXZuvXKhEIcJ0XK6sWOlwLP2RUbd4e9HZLNc">▶ Watch demo on MEGA</a>
+</video>
+
+> Can't see the video? [Watch on MEGA.nz](https://mega.nz/file/mYdl3ZxJ#YwBsKbAVXZuvXKhEIcJ0XK6sWOlwLP2RUbd4e9HZLNc)
+
 ![S8n Showcase](screenshots/Screenshot_2026-04-01_23-16-30.png)
 
 ---
@@ -180,11 +188,16 @@ The package manager is the core feature. Enter a search term to query all availa
 
 **Source tabs:** When a package is available from multiple sources, tabs appear at the top showing each source. Use `←/→` to switch.
 
+![S8n Source Tabs — snap and apt tabs for the same package](screenshots/s8n-source-tabs.png)
+
+
 ![S8n Search Pagination](screenshots/Screenshot_2026-04-01_23-18-33.png)
 
 ### Package Detail Panel
 
 Press `i` on any search result to open the detail panel:
+
+![S8n Package Detail Panel — epiphany metadata with install/remove actions](screenshots/s8n-detail-panel.png)
 
 - Shows full name, version, source, and description
 - Press `Enter` or `i` again to install from this panel
