@@ -1,5 +1,5 @@
 use super::{
-    run_command_captured, run_command_interactive, PackageInfo, PackageManager,
+    run_command_captured, run_command_interactive, run_command_quiet, PackageInfo, PackageManager,
     PmResult,
 };
 use async_trait::async_trait;
@@ -948,6 +948,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             remove_cmd: vec![], // removal is handled by `cargo uninstall`
             update_cmd: vec!["--no-confirm".into()],
             list_cmd: vec![],
+            needs_sudo: false,
         }),
     ]
 }
