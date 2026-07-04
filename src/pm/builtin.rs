@@ -1079,5 +1079,7 @@ pub fn get_default_managers() -> Vec<Box<dyn PackageManager>> {
             list_cmd: vec![],
             needs_sudo: false,
         }),
+        // Lilith Linux curated package registry
+        Box::new(crate::pm::lilith::LilithPm::new()),
     ]
 }

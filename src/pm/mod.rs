@@ -3,6 +3,7 @@ use std::process::Stdio;
 use tokio::process::Command;
 
 pub mod builtin;
+pub mod lilith;
 
 /// Structured information about a package from search results
 #[derive(Debug, Clone)]
