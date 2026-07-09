@@ -106,6 +106,10 @@ fn home_dir() -> PathBuf {
 /// Stateless package manager that fetches its package list from GitHub Pages.
 pub struct LilithPm;
 
+impl Default for LilithPm {
+    fn default() -> Self { Self::new() }
+}
+
 impl LilithPm {
     pub fn new() -> Self { Self }
 
