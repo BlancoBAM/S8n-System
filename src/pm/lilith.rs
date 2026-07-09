@@ -33,8 +33,7 @@ use crate::pm::{run_command_captured, run_command_quiet, PackageInfo, PackageMan
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MANIFEST_URL: &str =
-    "https://blancobam.github.io/lilith-packages/packages.toml";
+const MANIFEST_URL: &str = "https://blancobam.github.io/lilith-packages/packages.toml";
 /// Cache lifetime: 1 hour.
 const CACHE_TTL_SECS: u64 = 3_600;
 
@@ -81,8 +80,12 @@ pub struct LilithPackage {
     pub install_cmd: String,
 }
 
-fn ver_latest() -> String { "latest".into() }
-fn cat_xtra() -> String { "xtra".into() }
+fn ver_latest() -> String {
+    "latest".into()
+}
+fn cat_xtra() -> String {
+    "xtra".into()
+}
 
 // ─── Path helpers (no `dirs` dep) ────────────────────────────────────────────
 
@@ -107,11 +110,15 @@ fn home_dir() -> PathBuf {
 pub struct LilithPm;
 
 impl Default for LilithPm {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LilithPm {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     // ── Cache management ──────────────────────────────────────────────────────
 
@@ -121,7 +128,9 @@ impl LilithPm {
 
     fn cache_is_fresh() -> bool {
         let path = Self::cache_path();
-        if !path.exists() { return false; }
+        if !path.exists() {
+            return false;
+        }
         let mtime = std::fs::metadata(&path)
             .ok()
             .and_then(|m| m.modified().ok())
@@ -152,8 +161,10 @@ impl LilithPm {
         let mut cmd = Command::new("curl");
         cmd.args([
             "-fsSL",
-            "--max-time", "20",
-            "--user-agent", "s8n-package-manager/0.4",
+            "--max-time",
+            "20",
+            "--user-agent",
+            "s8n-package-manager/0.4",
             MANIFEST_URL,
         ]);
         if let Ok(content) = run_command_captured(&mut cmd).await {
@@ -180,7 +191,11 @@ impl LilithPm {
     // ── Conversion ────────────────────────────────────────────────────────────
 
     fn to_info(pkg: &LilithPackage) -> PackageInfo {
-        let bin = if !pkg.binary.is_empty() { &pkg.binary } else { &pkg.name };
+        let bin = if !pkg.binary.is_empty() {
+            &pkg.binary
+        } else {
+            &pkg.name
+        };
         PackageInfo {
             name: pkg.name.clone(),
             version: pkg.version.clone(),
@@ -202,9 +217,13 @@ impl LilithPm {
         );
         let mut cmd = Command::new("curl");
         cmd.args([
-            "-fsSL", "--max-time", "15",
-            "-H", "Accept: application/vnd.github+json",
-            "-H", "X-GitHub-Api-Version: 2022-11-28",
+            "-fsSL",
+            "--max-time",
+            "15",
+            "-H",
+            "Accept: application/vnd.github+json",
+            "-H",
+            "X-GitHub-Api-Version: 2022-11-28",
             &api_url,
         ]);
         let json = run_command_captured(&mut cmd).await.ok()?;
@@ -229,31 +248,51 @@ impl LilithPm {
     async fn install_one(pkg: &LilithPackage) -> PmResult {
         match pkg.install.as_str() {
             "cargo" => {
-                let krate = if !pkg.crate_name.is_empty() { &pkg.crate_name } else { &pkg.name };
+                let krate = if !pkg.crate_name.is_empty() {
+                    &pkg.crate_name
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("cargo");
                 cmd.args(["install", krate]);
                 run_command_quiet(&mut cmd).await
             }
             "apt" => {
-                let apt = if !pkg.apt_name.is_empty() { &pkg.apt_name } else { &pkg.name };
+                let apt = if !pkg.apt_name.is_empty() {
+                    &pkg.apt_name
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("sudo");
                 cmd.args(["apt", "install", "-y", apt]);
                 run_command_quiet(&mut cmd).await
             }
             "flatpak" => {
-                let id = if !pkg.flatpak_id.is_empty() { &pkg.flatpak_id } else { &pkg.name };
+                let id = if !pkg.flatpak_id.is_empty() {
+                    &pkg.flatpak_id
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("flatpak");
                 cmd.args(["install", "-y", "flathub", id]);
                 run_command_quiet(&mut cmd).await
             }
             "npm" => {
-                let npm = if !pkg.npm_name.is_empty() { &pkg.npm_name } else { &pkg.name };
+                let npm = if !pkg.npm_name.is_empty() {
+                    &pkg.npm_name
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("npm");
                 cmd.args(["install", "-g", npm]);
                 run_command_quiet(&mut cmd).await
             }
             "pip" => {
-                let pip = if !pkg.pip_name.is_empty() { &pkg.pip_name } else { &pkg.name };
+                let pip = if !pkg.pip_name.is_empty() {
+                    &pkg.pip_name
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("pip3");
                 cmd.args(["install", "--user", pip]);
                 run_command_quiet(&mut cmd).await
@@ -264,8 +303,12 @@ impl LilithPm {
                 } else {
                     match Self::resolve_github_url(pkg).await {
                         Some(u) => u,
-                        None => return PmResult::CommandFailed(
-                            -1, format!("No .deb URL for '{}'", pkg.name)),
+                        None => {
+                            return PmResult::CommandFailed(
+                                -1,
+                                format!("No .deb URL for '{}'", pkg.name),
+                            )
+                        }
                     }
                 };
                 let script = format!(
@@ -281,7 +324,9 @@ impl LilithPm {
             "script" => {
                 if pkg.url.is_empty() {
                     return PmResult::CommandFailed(
-                        -1, format!("No installer URL for '{}'", pkg.name));
+                        -1,
+                        format!("No installer URL for '{}'", pkg.name),
+                    );
                 }
                 let script = format!("curl -fsSL '{}' | sh", pkg.url);
                 let mut cmd = Command::new("bash");
@@ -294,8 +339,7 @@ impl LilithPm {
                 } else if !pkg.github.is_empty() {
                     format!("https://github.com/{}.git", pkg.github)
                 } else {
-                    return PmResult::CommandFailed(
-                        -1, format!("No git URL for '{}'", pkg.name));
+                    return PmResult::CommandFailed(-1, format!("No git URL for '{}'", pkg.name));
                 };
                 let safe = pkg.name.replace(['/', ' '], "-");
                 let tmp = format!("/tmp/lilith-install-{safe}");
@@ -320,14 +364,20 @@ impl LilithPm {
                 } else {
                     match Self::resolve_github_url(pkg).await {
                         Some(u) => u,
-                        None => return PmResult::CommandFailed(
-                            -1, format!("No download URL for '{}'", pkg.name)),
+                        None => {
+                            return PmResult::CommandFailed(
+                                -1,
+                                format!("No download URL for '{}'", pkg.name),
+                            )
+                        }
                     }
                 };
                 Self::install_from_url(pkg, &url, method).await
             }
             other => PmResult::CommandFailed(
-                -1, format!("Unknown install method '{}' for '{}'", other, pkg.name)),
+                -1,
+                format!("Unknown install method '{}' for '{}'", other, pkg.name),
+            ),
         }
     }
 
@@ -402,31 +452,51 @@ impl LilithPm {
     async fn remove_one(pkg: &LilithPackage) -> PmResult {
         match pkg.install.as_str() {
             "cargo" => {
-                let krate = if !pkg.crate_name.is_empty() { &pkg.crate_name } else { &pkg.name };
+                let krate = if !pkg.crate_name.is_empty() {
+                    &pkg.crate_name
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("cargo");
                 cmd.args(["uninstall", krate]);
                 run_command_quiet(&mut cmd).await
             }
             "apt" => {
-                let apt = if !pkg.apt_name.is_empty() { &pkg.apt_name } else { &pkg.name };
+                let apt = if !pkg.apt_name.is_empty() {
+                    &pkg.apt_name
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("sudo");
                 cmd.args(["apt", "remove", "-y", apt]);
                 run_command_quiet(&mut cmd).await
             }
             "flatpak" => {
-                let id = if !pkg.flatpak_id.is_empty() { &pkg.flatpak_id } else { &pkg.name };
+                let id = if !pkg.flatpak_id.is_empty() {
+                    &pkg.flatpak_id
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("flatpak");
                 cmd.args(["remove", "-y", id]);
                 run_command_quiet(&mut cmd).await
             }
             "npm" => {
-                let npm = if !pkg.npm_name.is_empty() { &pkg.npm_name } else { &pkg.name };
+                let npm = if !pkg.npm_name.is_empty() {
+                    &pkg.npm_name
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("npm");
                 cmd.args(["uninstall", "-g", npm]);
                 run_command_quiet(&mut cmd).await
             }
             "pip" => {
-                let pip = if !pkg.pip_name.is_empty() { &pkg.pip_name } else { &pkg.name };
+                let pip = if !pkg.pip_name.is_empty() {
+                    &pkg.pip_name
+                } else {
+                    &pkg.name
+                };
                 let mut cmd = Command::new("pip3");
                 cmd.args(["uninstall", "-y", pip]);
                 run_command_quiet(&mut cmd).await
@@ -443,20 +513,20 @@ impl LilithPm {
             }
             _ => {
                 // Remove the binary from PATH and any AppImage in /opt/lilith
-                let bin = if !pkg.binary.is_empty() { &pkg.binary } else { &pkg.name };
+                let bin = if !pkg.binary.is_empty() {
+                    &pkg.binary
+                } else {
+                    &pkg.name
+                };
                 if let Ok(path) = which(bin) {
                     let path_s = path.to_string_lossy().to_string();
                     let appimage = format!("/opt/lilith/{bin}.AppImage");
-                    let script =
-                        format!("rm -f '{path_s}' '{appimage}' 2>/dev/null; true");
+                    let script = format!("rm -f '{path_s}' '{appimage}' 2>/dev/null; true");
                     let mut cmd = Command::new("bash");
                     cmd.args(["-c", &script]);
                     run_command_quiet(&mut cmd).await
                 } else {
-                    PmResult::CommandFailed(
-                        -1,
-                        format!("Binary '{}' not found in PATH", bin),
-                    )
+                    PmResult::CommandFailed(-1, format!("Binary '{}' not found in PATH", bin))
                 }
             }
         }
@@ -467,10 +537,14 @@ impl LilithPm {
 
 #[async_trait]
 impl PackageManager for LilithPm {
-    fn name(&self) -> &str { "lilith" }
+    fn name(&self) -> &str {
+        "lilith"
+    }
 
     /// Always available — we use `curl` (universally available) to fetch the manifest.
-    fn is_available(&self) -> bool { true }
+    fn is_available(&self) -> bool {
+        true
+    }
 
     /// Interactive search: fetch manifest, print matching packages to stdout.
     async fn search(&self, query: &str) -> PmResult {
@@ -556,8 +630,12 @@ impl PackageManager for LilithPm {
     async fn install(&self, packages: &[String]) -> PmResult {
         let manifest = match Self::get_manifest().await {
             Some(m) => m,
-            None => return PmResult::CommandFailed(
-                -1, "Failed to fetch Lilith package manifest".into()),
+            None => {
+                return PmResult::CommandFailed(
+                    -1,
+                    "Failed to fetch Lilith package manifest".into(),
+                )
+            }
         };
 
         for name in packages {
@@ -583,8 +661,12 @@ impl PackageManager for LilithPm {
     async fn remove(&self, packages: &[String]) -> PmResult {
         let manifest = match Self::get_manifest().await {
             Some(m) => m,
-            None => return PmResult::CommandFailed(
-                -1, "Failed to fetch Lilith package manifest".into()),
+            None => {
+                return PmResult::CommandFailed(
+                    -1,
+                    "Failed to fetch Lilith package manifest".into(),
+                )
+            }
         };
 
         for name in packages {
